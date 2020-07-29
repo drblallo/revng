@@ -12,74 +12,74 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/iterator.h"
 
+#include "revng/ADT/KeyedObjectContainer.h"
 #include "revng/Support/Assert.h"
 
-// For std::map-compatible containers
-template<typename T, typename = void>
-struct KeyContainer {
-  using key_type = typename T::key_type;
-  using pointer = std::conditional_t<std::is_const<T>::value,
-                                     typename T::const_pointer,
-                                     typename T::pointer>;
-  using value_type = std::conditional_t<std::is_const<T>::value,
-                                        const typename T::value_type,
-                                        typename T::value_type>;
+//
+// has_mapped_type_member
+//
+template<class T, class Enable=void>
+struct has_mapped_type_member : std::false_type {};
+template<class T>
+struct has_mapped_type_member<T,
+                              typename enable_if_type<typename T::mapped_type>::type>
+  : std::true_type {};
 
-  static int compare(value_type &LHS, value_type &RHS) {
-    if (LHS.first == RHS.first)
-      return 0;
-    if (std::less<key_type>()(LHS.first, RHS.first))
-      return -1;
-    else
-      return 1;
-  }
+//
+// has_value_type_member
+//
+template<class T, class Enable=void>
+struct has_value_type_member : std::false_type {};
+template<class T>
+struct has_value_type_member<T,
+                              typename enable_if_type<typename T::value_type>::type>
+  : std::true_type {};
 
-  static void insert(T &Container, typename T::key_type Key) {
-    Container.insert({ Key, typename T::mapped_type() });
-  }
+//
+// has_key_type_member
+//
+template<class T, class Enable=void>
+struct has_key_type_member : std::false_type {};
+template<class T>
+struct has_key_type_member<T,
+                           typename enable_if_type<typename T::key_type>::type>
+  : std::true_type {};
 
-  static pointer find(T &Container, typename T::key_type &Key) {
-    return &*Container.find(Key);
-  }
+//
+// is_map_like
+//
+template<typename T>
+constexpr bool is_map_like_v = (has_value_type_member<T>::value
+                                and has_key_type_member<T>::value
+                                and has_mapped_type_member<T>::value);
 
-  static void sort(T &) {}
-};
+template<typename T, typename K=void>
+using enable_if_is_map_like_t = std::enable_if_t<is_map_like_v<T>, K>;
 
-template<typename>
-struct isSet : public std::false_type {};
+//
+// is_set_like
+//
+template<class T, class Enable=void>
+struct same_key_value_types : std::false_type {};
+template<class T>
+struct same_key_value_types<T,
+           std::enable_if_t<std::is_same_v<typename T::key_type,
+                                           typename T::value_type>>>
+  : std::true_type {};
 
 template<typename T>
-struct isSet<std::set<T>> : public std::true_type {};
+constexpr bool is_set_like_v = (has_value_type_member<T>::value
+                                and has_key_type_member<T>::value
+                                and not has_mapped_type_member<T>::value
+                                and same_key_value_types<T>::value);
 
-template<typename T>
-struct isSet<const std::set<T>> : public std::true_type {};
+template<typename T, typename K=void>
+using enable_if_is_set_like_t = std::enable_if_t<is_set_like_v<T>, K>;
 
-static_assert(isSet<std::set<int>>::value, "");
-static_assert(isSet<const std::set<int>>::value, "");
-
-template<typename T>
-struct KeyContainer<T, typename std::enable_if_t<isSet<T>::value>> {
-  using key_type = const typename T::key_type;
-  using pointer = const key_type *;
-
-  static int compare(key_type &LHS, key_type &RHS) {
-    if (LHS == RHS)
-      return 0;
-    if (std::less<key_type>()(LHS, RHS))
-      return -1;
-    else
-      return 1;
-  }
-
-  static void insert(T &Container, key_type Key) { Container.insert(Key); }
-
-  static pointer find(const T &Container, key_type Key) {
-    return &*Container.find(Key);
-  }
-
-  static void sort(T &) {}
-};
-
+// WIP: normalize capitalization
+//
+// isVectorOfPairs
+//
 template<typename>
 struct isVectorOfPairs : public std::false_type {};
 
@@ -100,59 +100,63 @@ static_assert(isVectorOfPairs<const vector<pair<const int, long>>>::value, "");
 
 } // namespace
 
+//
+// element_pointer_t
+//
 template<typename T>
-struct KeyContainer<T, typename std::enable_if_t<isVectorOfPairs<T>::value>> {
-  using key_type = typename T::value_type::first_type;
-  using value_type = std::conditional_t<std::is_const<T>::value,
-                                        const typename T::value_type,
-                                        typename T::value_type>;
-  using pointer = std::conditional_t<std::is_const<T>::value,
-                                     typename T::const_pointer,
-                                     typename T::pointer>;
-  using mapped_type = typename value_type::second_type;
+using element_pointer_t = decltype(&*std::declval<T>().begin());
 
-  static int compare(value_type &LHS, value_type &RHS) {
-    if (LHS.first == RHS.first)
-      return 0;
-    if (std::less<key_type>()(LHS.first, RHS.first))
+template<typename T>
+enable_if_is_set_like_t<T, const typename T::key_type &>
+keyFromValue(const typename T::value_type &Value) {
+  return Value;
+}
+
+template<typename T>
+enable_if_is_KeyedObjectContainer_t<T, typename T::key_type>
+keyFromValue(const typename T::value_type &Value) {
+  return KeyedObjectTraits<typename T::value_type>::key(Value);
+}
+
+template<typename T>
+std::enable_if_t<isVectorOfPairs<T>::value,
+                 const typename T::value_type::first_type &>
+keyFromValue(const typename T::value_type &Value) {
+  return Value.first;
+}
+
+template<typename T>
+enable_if_is_map_like_t<T,
+                        const typename T::value_type::first_type &>
+keyFromValue(const typename T::value_type &Value) {
+  return Value.first;
+}
+
+template<typename Map>
+struct DefaultComparator {
+  template<typename T>
+  static int compare(const T &LHS, const T &RHS) {
+    auto LHSKey = keyFromValue<Map>(LHS);
+    auto RHSKey = keyFromValue<Map>(RHS);
+    auto Less = std::less<decltype(LHSKey)>();
+    if (Less(LHSKey, RHSKey))
       return -1;
-    else
+    else if (Less(RHSKey, LHSKey))
       return 1;
-  }
-
-  static void insert(T &Container, key_type Key) {
-    Container.push_back({ Key, mapped_type() });
-  }
-
-  static pointer find(T &Container, key_type Key) {
-    auto Condition = [Key](const value_type &Value) {
-      return Value.first == Key;
-    };
-    return &*std::find_if(Container.begin(), Container.end(), Condition);
-  }
-
-  static void sort(T &Container) {
-    static_assert(not std::is_const<T>::value, "");
-    using non_const_value_type = std::pair<std::remove_const_t<key_type>,
-                                           mapped_type>;
-    auto Less = [](const non_const_value_type &This,
-                   const non_const_value_type &Other) {
-      return This.first < Other.first;
-    };
-    using vector = std::vector<non_const_value_type>;
-    auto &NonConst = *reinterpret_cast<vector *>(&Container);
-    std::sort(NonConst.begin(), NonConst.end(), Less);
+    else
+      return 0;
   }
 };
 
-template<typename Map, typename KC = KeyContainer<Map>>
-using zipmap_pair = std::pair<typename KC::pointer, typename KC::pointer>;
 
-template<typename Map, typename KC = KeyContainer<Map>>
+template<typename Map, typename Comparator = DefaultComparator<Map>>
+using zipmap_pair = std::pair<element_pointer_t<Map>, element_pointer_t<Map>>;
+
+template<typename Map, typename Comparator = DefaultComparator<Map>>
 class ZipMapIterator
-  : public llvm::iterator_facade_base<ZipMapIterator<Map, KC>,
+  : public llvm::iterator_facade_base<ZipMapIterator<Map, Comparator>,
                                       std::forward_iterator_tag,
-                                      const zipmap_pair<Map, KC>> {
+                                      const zipmap_pair<Map, Comparator>> {
 public:
   template<bool C, typename A, typename B>
   using conditional_t = typename std::conditional<C, A, B>::type;
@@ -160,7 +164,7 @@ public:
                                        typename Map::const_iterator,
                                        typename Map::iterator>;
   using inner_range = llvm::iterator_range<inner_iterator>;
-  using value_type = zipmap_pair<Map, KC>;
+  using value_type = zipmap_pair<Map, Comparator>;
   using reference = typename ZipMapIterator::reference;
 
 private:
@@ -205,9 +209,9 @@ private:
 
   void next() {
     if (leftIsValid() and rightIsValid()) {
-      switch (KC::compare(*LeftIt, *RightIt)) {
+      switch (Comparator::compare(*LeftIt, *RightIt)) {
       case 0:
-        Current = std::make_pair(&*LeftIt, &*RightIt);
+        Current = decltype(Current)(&*LeftIt, &*RightIt);
         LeftIt++;
         RightIt++;
         break;
@@ -237,21 +241,21 @@ private:
   }
 };
 
-template<typename T, typename KC = KeyContainer<T>>
-inline ZipMapIterator<T, KC> zipmap_begin(T &Left, T &Right) {
-  return ZipMapIterator<T, KC>(llvm::make_range(Left.begin(), Left.end()),
+template<typename T, typename Comparator = DefaultComparator<T>>
+inline ZipMapIterator<T, Comparator> zipmap_begin(T &Left, T &Right) {
+  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.begin(), Left.end()),
                                llvm::make_range(Right.begin(), Right.end()));
 }
 
-template<typename T, typename KC = KeyContainer<T>>
-inline ZipMapIterator<T, KC> zipmap_end(T &Left, T &Right) {
-  return ZipMapIterator<T, KC>(llvm::make_range(Left.end(), Left.end()),
+template<typename T, typename Comparator = DefaultComparator<T>>
+inline ZipMapIterator<T, Comparator> zipmap_end(T &Left, T &Right) {
+  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.end(), Left.end()),
                                llvm::make_range(Right.end(), Right.end()));
 }
 
-template<typename T, typename KC = KeyContainer<T>>
-inline llvm::iterator_range<ZipMapIterator<T, KC>>
+template<typename T, typename Comparator = DefaultComparator<T>>
+inline llvm::iterator_range<ZipMapIterator<T, Comparator>>
 zipmap_range(T &Left, T &Right) {
-  return llvm::make_range(zipmap_begin<T, KC>(Left, Right),
-                          zipmap_end<T, KC>(Left, Right));
+  return llvm::make_range(zipmap_begin<T, Comparator>(Left, Right),
+                          zipmap_end<T, Comparator>(Left, Right));
 }

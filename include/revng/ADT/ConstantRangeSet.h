@@ -13,10 +13,7 @@
 using APIntVector = llvm::SmallVector<llvm::APInt, 4>;
 
 struct APIntVectorKeyContainer {
-  using key_type = const llvm::APInt;
-  using pointer = const llvm::APInt *;
-
-  static int compare(key_type &LHS, key_type &RHS) {
+  static int compare(const llvm::APInt &LHS, const llvm::APInt &RHS) {
     if (LHS == RHS)
       return 0;
     if (LHS.ult(RHS))

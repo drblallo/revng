@@ -18,6 +18,8 @@
 #include "revng/StackAnalysis/StackAnalysis.h"
 #include "revng/Support/CommandLine.h"
 #include "revng/Support/IRHelpers.h"
+#include "revng/Support/MetadataOutput.h"
+#include "revng/Model/Binary.h"
 
 #include "Cache.h"
 #include "InterproceduralAnalysis.h"
@@ -53,6 +55,21 @@ static opt<std::string> StackAnalysisOutputPath("stack-analysis-output",
 
 } // namespace
 
+template<typename T>
+static void benchmark(T Function) {
+  for (unsigned I = 0; I < 10; I++)
+    Function();
+
+
+  typedef std::chrono::high_resolution_clock Clock;
+  auto t1 = Clock::now();
+  for (unsigned I = 0; I < 100; I++)
+    Function();
+  auto t2 = Clock::now();
+  llvm::outs() << (t2 - t1).count() << '\n';
+}
+
+
 template<>
 char StackAnalysis<false>::ID = 0;
 
@@ -65,6 +82,113 @@ static opt<std::string> ABIAnalysisOutputPath("abi-analysis-output",
                                               value_desc("path"),
                                               cat(MainCategory));
 
+static void commitToModel(const FunctionsSummary &Summary,
+                          model::Binary &TheBinary) {
+  using namespace model;
+
+  for (const auto &[Entry, FunctionSummary] : Summary.Functions) {
+    if (Entry == nullptr)
+      continue;
+
+    // Get the entry point address
+    MetaAddress EntryPC = getBasicBlockPC(Entry);
+    revng_assert(EntryPC.isValid());
+
+    // Create the function
+    revng_assert(TheBinary.Functions.count(EntryPC) == 0);
+    model::Function &Function = TheBinary.Functions[EntryPC];
+
+    // Assign a name
+    Function.Name = Entry->getName();
+
+    Function.Type = static_cast<model::FunctionType::Values>(FunctionSummary.Type);
+
+    for (const auto &[Block, Branch] : FunctionSummary.BasicBlocks) {
+      // Remap BranchType to FunctionEdgeType
+      namespace FET = FunctionEdgeType;
+      FET::Values EdgeType = FET::Invalid;
+
+      switch (Branch) {
+      case BranchType::Invalid:
+      case BranchType::FakeFunction:
+      case BranchType::RegularFunction:
+      case BranchType::NoReturnFunction:
+      case BranchType::UnhandledCall:
+        revng_abort();
+        break;
+
+      case BranchType::InstructionLocalCFG:
+        EdgeType = FET::Invalid;
+        break;
+
+      case BranchType::FunctionLocalCFG:
+        EdgeType = FET::DirectBranch;
+        break;
+
+      case BranchType::FakeFunctionCall:
+        EdgeType = FET::FakeFunctionCall;
+        break;
+
+      case BranchType::FakeFunctionReturn:
+        EdgeType = FET::FakeFunctionReturn;
+        break;
+
+      case BranchType::HandledCall:
+        EdgeType = FET::FunctionCall;
+        break;
+
+      case BranchType::IndirectCall:
+        EdgeType = FET::IndirectCall;
+        break;
+
+      case BranchType::Return:
+        EdgeType = FET::Return;
+        break;
+
+      case BranchType::BrokenReturn:
+        EdgeType = FET::BrokenReturn;
+        break;
+
+      case BranchType::IndirectTailCall:
+        EdgeType = FET::IndirectTailCall;
+        break;
+
+      case BranchType::LongJmp:
+        EdgeType = FET::LongJmp;
+        break;
+
+      case BranchType::Killer:
+        EdgeType = FET::Killer;
+        break;
+
+      case BranchType::Unreachable:
+        EdgeType = FET::Unreachable;
+        break;
+
+      }
+
+      if (EdgeType == FET::Invalid)
+        continue;
+
+      // Identify Source address
+      MetaAddress Source = getPC(Block->getTerminator()).first;
+      revng_assert(Source.isValid());
+
+      // Identify Destination address
+      MetaAddress Destination = MetaAddress::invalid();
+      if (BasicBlock *Successor = Block->getSingleSuccessor())
+        Destination = getBasicBlockPC(Successor);
+
+      // Record the edge in the CFG
+      FunctionEdge NewEdge { Source, Destination, EdgeType };
+      revng_assert(Function.CFG.count(NewEdge) == 0);
+      Function.CFG.insert(NewEdge);
+    }
+
+  }
+
+}
+
 template<bool AnalyzeABI>
 bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
   Function &F = *M.getFunction("root");
@@ -72,6 +196,8 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
   revng_log(PassesLog, "Starting StackAnalysis");
 
   auto &GCBI = getAnalysis<GeneratedCodeBasicInfo>();
+
+  auto &LMP = getAnalysis<LoadModelPass>();
 
   // The stack analysis works function-wise. We consider two sets of functions:
   // first (Force == true) those that are highly likely to be real functions
@@ -177,10 +303,9 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
     }
   }
 
-  std::stringstream Output;
   GrandResult = Results.finalize(&M, &TheCache);
-  GrandResult.dump(&M, Output);
-  TextRepresentation = Output.str();
+
+  commitToModel(GrandResult, LMP.getWriteableModel());
 
   if (ClobberedLog.isEnabled()) {
     for (auto &P : GrandResult.Functions) {
@@ -191,7 +316,12 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
     }
   }
 
-  revng_log(StackAnalysisLog, TextRepresentation);
+  if (StackAnalysisLog.isEnabled()) {
+    std::stringstream Output;
+    GrandResult.dump(&M, Output);
+    TextRepresentation = Output.str();
+    revng_log(StackAnalysisLog, TextRepresentation);
+  }
 
   revng_log(PassesLog, "Ending StackAnalysis");
 

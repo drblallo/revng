@@ -11,6 +11,7 @@
 #include "revng/BasicAnalyses/GeneratedCodeBasicInfo.h"
 #include "revng/FunctionCallIdentification/FunctionCallIdentification.h"
 #include "revng/StackAnalysis/FunctionsSummary.h"
+#include "revng/Model/LoadModelPass.h"
 
 namespace StackAnalysis {
 
@@ -29,6 +30,7 @@ public:
   void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
     AU.setPreservesAll();
     AU.addRequired<GeneratedCodeBasicInfo>();
+    AU.addRequired<LoadModelPass>();
   }
 
   bool runOnModule(llvm::Module &M) override;

@@ -1241,7 +1241,6 @@ void IFI::run() {
 }
 
 bool IF::runOnModule(Module &TheModule) {
-
   // Retrieve analysis of the GeneratedCodeBasicInfo pass
   auto &GCBI = getAnalysis<GeneratedCodeBasicInfo>();
 
