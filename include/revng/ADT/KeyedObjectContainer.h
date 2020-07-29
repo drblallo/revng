@@ -18,11 +18,14 @@ class SortedVector;
 // is_KeyedObjectContainer
 //
 template<typename T>
-constexpr bool is_KeyedObjectContainer_v = (is_specialization_v<std::remove_cv_t<T>, MutableSet>
-                                            or is_specialization_v<std::remove_cv_t<T>, SortedVector>);
+constexpr bool is_KeyedObjectContainer_v =
+  (is_specialization_v<
+     std::remove_cv_t<T>,
+     MutableSet> or is_specialization_v<std::remove_cv_t<T>, SortedVector>);
 
-template<typename T, typename K=void>
-using enable_if_is_KeyedObjectContainer_t = std::enable_if_t<is_KeyedObjectContainer_v<T>, K>;
+template<typename T, typename K = void>
+using enable_if_is_KeyedObjectContainer_t = std::
+  enable_if_t<is_KeyedObjectContainer_v<T>, K>;
 
 static_assert(is_KeyedObjectContainer_v<MutableSet<int>>);
 static_assert(is_KeyedObjectContainer_v<SortedVector<int>>);
@@ -46,12 +49,14 @@ yamlize(llvm::yaml::IO &io, T &Seq, bool, Context &Ctx) {
     }
   } else {
     auto Inserter = Seq.batch_insert();
-    for (unsigned I=0; I < InputCount; ++I) {
+    for (unsigned I = 0; I < InputCount; ++I) {
       void *SaveInfo;
       if (io.preflightElement(I, SaveInfo)) {
         using value_type = typename T::value_type;
-        using key_type = decltype(KeyedObjectTraits<value_type>::key(std::declval<value_type>()));
-        value_type Instance = KeyedObjectTraits<value_type>::fromKey(key_type());
+        using key_type = decltype(
+          KeyedObjectTraits<value_type>::key(std::declval<value_type>()));
+        value_type Instance = KeyedObjectTraits<value_type>::fromKey(
+          key_type());
         yamlize(io, Instance, true, Ctx);
         Inserter.insert(Instance);
         io.postflightElement(SaveInfo);
@@ -62,6 +67,6 @@ yamlize(llvm::yaml::IO &io, T &Seq, bool, Context &Ctx) {
   io.endSequence();
 }
 
-}
+} // namespace llvm::yaml
 
 #endif // KEYEDOBJECTCONTAINER_H

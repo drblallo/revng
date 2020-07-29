@@ -21,6 +21,7 @@ template<typename T>
 class MutableSet {
 private:
   using KOT = KeyedObjectTraits<T>;
+
 public:
   using key_type = const decltype(KOT::key(std::declval<T>()));
 
@@ -42,7 +43,8 @@ private:
   using inner_iterator = typename map_type::iterator;
   using const_inner_iterator = typename map_type::const_iterator;
   using inner_reverse_iterator = typename map_type::reverse_iterator;
-  using const_inner_reverse_iterator = typename map_type::const_reverse_iterator;
+  using const_inner_reverse_iterator = typename map_type::
+    const_reverse_iterator;
 
 private:
   template<typename A, typename B>
@@ -50,13 +52,17 @@ private:
 
 public:
   using iterator = mapped_iterator<inner_iterator,
-                                   decltype(getSecond<key_type, inner_mapped_type>) *>;
-  using const_iterator = mapped_iterator<const_inner_iterator,
-                                         decltype(getConstSecond<key_type, inner_mapped_type>) *>;
-  using reverse_iterator = mapped_iterator<inner_reverse_iterator,
-                                           decltype(getSecond<key_type, inner_mapped_type>) *>;
-  using const_reverse_iterator = mapped_iterator<const_inner_reverse_iterator,
-                                                 decltype(getConstSecond<key_type, inner_mapped_type>) *>;
+                                   decltype(
+                                     getSecond<key_type, inner_mapped_type>) *>;
+  using const_iterator = mapped_iterator<
+    const_inner_iterator,
+    decltype(getConstSecond<key_type, inner_mapped_type>) *>;
+  using reverse_iterator = mapped_iterator<
+    inner_reverse_iterator,
+    decltype(getSecond<key_type, inner_mapped_type>) *>;
+  using const_reverse_iterator = mapped_iterator<
+    const_inner_reverse_iterator,
+    decltype(getConstSecond<key_type, inner_mapped_type>) *>;
 
 private:
   map_type TheMap;
@@ -95,9 +101,13 @@ public:
   const_iterator cend() const { return wrapIterator(TheMap.cend()); }
   reverse_iterator rbegin() { return wrapIterator(TheMap.rbegin()); }
   reverse_iterator rend() { return wrapIterator(TheMap.rend()); }
-  const_reverse_iterator rbegin() const { return wrapIterator(TheMap.rbegin()); }
+  const_reverse_iterator rbegin() const {
+    return wrapIterator(TheMap.rbegin());
+  }
   const_reverse_iterator rend() const { return wrapIterator(TheMap.rend()); }
-  const_reverse_iterator crbegin() const { return wrapIterator(TheMap.crbegin()); }
+  const_reverse_iterator crbegin() const {
+    return wrapIterator(TheMap.crbegin());
+  }
   const_reverse_iterator crend() const { return wrapIterator(TheMap.crend()); }
 
   bool empty() const { return TheMap.empty(); }
@@ -106,7 +116,7 @@ public:
   void clear() { TheMap.clear(); }
 
   std::pair<iterator, bool> insert(const T &Value) {
-    auto Result = TheMap.insert({ KOT::key(Value), Value});
+    auto Result = TheMap.insert({ KOT::key(Value), Value });
     return { wrapIterator(Result.first), Result.second };
   }
 
@@ -119,21 +129,15 @@ public:
     return wrapIterator(TheMap.erase(unwrapIterator(Pos)));
   }
   iterator erase(iterator First, iterator Last) {
-    return wrapIterator(TheMap.erase(unwrapIterator(First),
-                                     unwrapIterator(Last)));
+    return wrapIterator(
+      TheMap.erase(unwrapIterator(First), unwrapIterator(Last)));
   }
 
-  size_type erase(const key_type &Key) {
-    return TheMap.erase(Key);
-  }
+  size_type erase(const key_type &Key) { return TheMap.erase(Key); }
 
-  size_type count(const key_type &Key) const {
-    return TheMap.count(Key);
-  }
+  size_type count(const key_type &Key) const { return TheMap.count(Key); }
 
-  iterator find(const key_type &Key) {
-    return wrapIterator(TheMap.find(Key));
-  }
+  iterator find(const key_type &Key) { return wrapIterator(TheMap.find(Key)); }
 
   const_iterator find(const key_type &Key) const {
     return wrapIterator(TheMap.find(Key));
@@ -181,9 +185,7 @@ public:
   }
 
 private:
-  static inner_iterator unwrapIterator(iterator It) {
-    return It.getCurrent();
-  }
+  static inner_iterator unwrapIterator(iterator It) { return It.getCurrent(); }
 
   static const_inner_iterator unwrapIterator(const_iterator It) {
     return It.getCurrent();
@@ -202,9 +204,9 @@ private:
   }
 
   static const_reverse_iterator wrapIterator(const_inner_reverse_iterator It) {
-    return const_reverse_iterator(It, getConstSecond<key_type, inner_mapped_type>);
+    return const_reverse_iterator(It,
+                                  getConstSecond<key_type, inner_mapped_type>);
   }
-
 };
 
 #endif // MUTABLESET_H

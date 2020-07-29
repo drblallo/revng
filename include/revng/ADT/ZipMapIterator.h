@@ -18,27 +18,27 @@
 //
 // has_mapped_type_member
 //
-template<class T, class Enable=void>
+template<class T, class Enable = void>
 struct has_mapped_type_member : std::false_type {};
 template<class T>
-struct has_mapped_type_member<T,
-                              typename enable_if_type<typename T::mapped_type>::type>
-  : std::true_type {};
+struct has_mapped_type_member<
+  T,
+  typename enable_if_type<typename T::mapped_type>::type> : std::true_type {};
 
 //
 // has_value_type_member
 //
-template<class T, class Enable=void>
+template<class T, class Enable = void>
 struct has_value_type_member : std::false_type {};
 template<class T>
-struct has_value_type_member<T,
-                              typename enable_if_type<typename T::value_type>::type>
-  : std::true_type {};
+struct has_value_type_member<
+  T,
+  typename enable_if_type<typename T::value_type>::type> : std::true_type {};
 
 //
 // has_key_type_member
 //
-template<class T, class Enable=void>
+template<class T, class Enable = void>
 struct has_key_type_member : std::false_type {};
 template<class T>
 struct has_key_type_member<T,
@@ -53,18 +53,19 @@ constexpr bool is_map_like_v = (has_value_type_member<T>::value
                                 and has_key_type_member<T>::value
                                 and has_mapped_type_member<T>::value);
 
-template<typename T, typename K=void>
+template<typename T, typename K = void>
 using enable_if_is_map_like_t = std::enable_if_t<is_map_like_v<T>, K>;
 
 //
 // is_set_like
 //
-template<class T, class Enable=void>
+template<class T, class Enable = void>
 struct same_key_value_types : std::false_type {};
 template<class T>
-struct same_key_value_types<T,
-           std::enable_if_t<std::is_same_v<typename T::key_type,
-                                           typename T::value_type>>>
+struct same_key_value_types<
+  T,
+  std::enable_if_t<
+    std::is_same_v<typename T::key_type, typename T::value_type>>>
   : std::true_type {};
 
 template<typename T>
@@ -73,7 +74,7 @@ constexpr bool is_set_like_v = (has_value_type_member<T>::value
                                 and not has_mapped_type_member<T>::value
                                 and same_key_value_types<T>::value);
 
-template<typename T, typename K=void>
+template<typename T, typename K = void>
 using enable_if_is_set_like_t = std::enable_if_t<is_set_like_v<T>, K>;
 
 // WIP: normalize capitalization
@@ -126,8 +127,7 @@ keyFromValue(const typename T::value_type &Value) {
 }
 
 template<typename T>
-enable_if_is_map_like_t<T,
-                        const typename T::value_type::first_type &>
+enable_if_is_map_like_t<T, const typename T::value_type::first_type &>
 keyFromValue(const typename T::value_type &Value) {
   return Value.first;
 }
@@ -147,7 +147,6 @@ struct DefaultComparator {
       return 0;
   }
 };
-
 
 template<typename Map, typename Comparator = DefaultComparator<Map>>
 using zipmap_pair = std::pair<element_pointer_t<Map>, element_pointer_t<Map>>;
@@ -243,14 +242,17 @@ private:
 
 template<typename T, typename Comparator = DefaultComparator<T>>
 inline ZipMapIterator<T, Comparator> zipmap_begin(T &Left, T &Right) {
-  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.begin(), Left.end()),
-                               llvm::make_range(Right.begin(), Right.end()));
+  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.begin(),
+                                                        Left.end()),
+                                       llvm::make_range(Right.begin(),
+                                                        Right.end()));
 }
 
 template<typename T, typename Comparator = DefaultComparator<T>>
 inline ZipMapIterator<T, Comparator> zipmap_end(T &Left, T &Right) {
   return ZipMapIterator<T, Comparator>(llvm::make_range(Left.end(), Left.end()),
-                               llvm::make_range(Right.end(), Right.end()));
+                                       llvm::make_range(Right.end(),
+                                                        Right.end()));
 }
 
 template<typename T, typename Comparator = DefaultComparator<T>>

@@ -70,18 +70,54 @@ public:
     }
   }
 
-  iterator begin() { sort(); return TheVector.begin(); }
-  iterator end() { sort(); return TheVector.end(); }
-  const_iterator begin() const { sort(); return TheVector.begin(); }
-  const_iterator end() const { sort(); return TheVector.end(); }
-  const_iterator cbegin() const { sort(); return TheVector.cbegin(); }
-  const_iterator cend() const { sort(); return TheVector.cend(); }
-  reverse_iterator rbegin() { sort(); return TheVector.rbegin(); }
-  reverse_iterator rend() { sort(); return TheVector.rend(); }
-  const_reverse_iterator rbegin() const { sort(); return TheVector.rbegin(); }
-  const_reverse_iterator rend() const { sort(); return TheVector.rend(); }
-  const_reverse_iterator crbegin() const { sort(); return TheVector.crbegin(); }
-  const_reverse_iterator crend() const { sort(); return TheVector.crend(); }
+  iterator begin() {
+    sort();
+    return TheVector.begin();
+  }
+  iterator end() {
+    sort();
+    return TheVector.end();
+  }
+  const_iterator begin() const {
+    sort();
+    return TheVector.begin();
+  }
+  const_iterator end() const {
+    sort();
+    return TheVector.end();
+  }
+  const_iterator cbegin() const {
+    sort();
+    return TheVector.cbegin();
+  }
+  const_iterator cend() const {
+    sort();
+    return TheVector.cend();
+  }
+  reverse_iterator rbegin() {
+    sort();
+    return TheVector.rbegin();
+  }
+  reverse_iterator rend() {
+    sort();
+    return TheVector.rend();
+  }
+  const_reverse_iterator rbegin() const {
+    sort();
+    return TheVector.rbegin();
+  }
+  const_reverse_iterator rend() const {
+    sort();
+    return TheVector.rend();
+  }
+  const_reverse_iterator crbegin() const {
+    sort();
+    return TheVector.crbegin();
+  }
+  const_reverse_iterator crend() const {
+    sort();
+    return TheVector.crend();
+  }
 
   bool empty() const { return TheVector.empty(); }
   size_type size() const { return TheVector.size(); }
@@ -96,7 +132,7 @@ public:
 #ifndef NDEBUG
     using KeyTraits = KeyTraits<key_type_internal>;
     auto ValueKey = KeyTraits::toInts(Value.key());
-    auto Compare = [&ValueKey] (const T &V) {
+    auto Compare = [&ValueKey](const T &V) {
       return KeyTraits::toInts(V.key()) == ValueKey;
     };
     auto End = TheVector.end();
@@ -149,7 +185,8 @@ public:
     using KeyTraits = KeyTraits<key_type_internal>;
     auto It = lower_bound(Key);
     auto End = end();
-    if (!(It == End) and KeyTraits::toInts(Key) < KeyTraits::toInts(It->key())) {
+    if (!(It == End)
+        and KeyTraits::toInts(Key) < KeyTraits::toInts(It->key())) {
       return End;
     } else {
       return It;
@@ -160,7 +197,8 @@ public:
     using KeyTraits = KeyTraits<key_type_internal>;
     auto It = lower_bound(Key);
     auto End = end();
-    if (!(It == End) and KeyTraits::toInts(Key) < KeyTraits::toInts(It->key())) {
+    if (!(It == End)
+        and KeyTraits::toInts(Key) < KeyTraits::toInts(It->key())) {
       return End;
     } else {
       return It;
@@ -170,7 +208,7 @@ public:
   iterator lower_bound(const key_type &Key) {
     sort();
     auto TargetInts = KeyTraits<key_type_internal>::toInts(Key);
-    auto Compare = [] (const T &LHS, const T &RHS) {
+    auto Compare = [](const T &LHS, const T &RHS) {
       using KeyTraits = KeyTraits<key_type_internal>;
       return KeyTraits::toInts(LHS.key()) < KeyTraits::toInts(RHS.key());
     };
@@ -180,7 +218,7 @@ public:
   const_iterator lower_bound(const key_type &Key) const {
     sort();
     auto TargetInts = KeyTraits<key_type_internal>::toInts(Key);
-    auto Compare = [] (const T &LHS, const T &RHS) {
+    auto Compare = [](const T &LHS, const T &RHS) {
       using KeyTraits = KeyTraits<key_type_internal>;
       return KeyTraits::toInts(LHS.key()) < KeyTraits::toInts(RHS.key());
     };
@@ -190,7 +228,7 @@ public:
   iterator upper_bound(const key_type &Key) {
     sort();
     auto TargetInts = KeyTraits<key_type_internal>::toInts(Key);
-    auto Compare = [] (const T &LHS, const T &RHS) {
+    auto Compare = [](const T &LHS, const T &RHS) {
       using KeyTraits = KeyTraits<key_type_internal>;
       return KeyTraits::toInts(LHS.key()) < KeyTraits::toInts(RHS.key());
     };
@@ -201,7 +239,7 @@ public:
     sort();
     auto TargetInts = KeyTraits<key_type_internal>::toInts(Key);
     // WIP: factor out
-    auto Compare = [] (const T &LHS, const T &RHS) {
+    auto Compare = [](const T &LHS, const T &RHS) {
       using KeyTraits = KeyTraits<key_type_internal>;
       return KeyTraits::toInts(LHS.key()) < KeyTraits::toInts(RHS.key());
     };
@@ -210,7 +248,7 @@ public:
 
   void sort() const {
     if (not IsSorted) {
-      auto Compare = [] (const T &LHS, const T &RHS) {
+      auto Compare = [](const T &LHS, const T &RHS) {
         using KeyTraits = KeyTraits<key_type_internal>;
         return KeyTraits::toInts(LHS.key()) < KeyTraits::toInts(RHS.key());
       };
@@ -218,7 +256,6 @@ public:
       IsSorted = true;
     }
   }
-
 };
 
 #endif // LAZILYSORTEDVECTOR_H

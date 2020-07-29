@@ -9,16 +9,14 @@
 #include "revng/Support/Assert.h"
 
 template<class ForwardIt, class BinaryPredicate>
-ForwardIt unique_last(ForwardIt First,
-                      ForwardIt Last,
-                      BinaryPredicate Predicate) {
+ForwardIt
+unique_last(ForwardIt First, ForwardIt Last, BinaryPredicate Predicate) {
   if (First == Last)
     return Last;
 
   ForwardIt Result = First;
   while (++First != Last) {
-    if (not Predicate(*Result, *First)
-        and ++Result != First) {
+    if (not Predicate(*Result, *First) and ++Result != First) {
       *Result = std::move(*First);
     } else {
       *Result = std::move(*First);
@@ -270,34 +268,22 @@ public:
 
   iterator lower_bound(const key_type &Key) {
     revng_assert(not BatchInsertInProgress);
-    return std::lower_bound(begin(),
-                            end(),
-                            value_type { Key },
-                            compareElements);
+    return std::lower_bound(begin(), end(), value_type{ Key }, compareElements);
   }
 
   const_iterator lower_bound(const key_type &Key) const {
     revng_assert(not BatchInsertInProgress);
-    return std::lower_bound(begin(),
-                            end(),
-                            value_type { Key },
-                            compareElements);
+    return std::lower_bound(begin(), end(), value_type{ Key }, compareElements);
   }
 
   iterator upper_bound(const key_type &Key) {
     revng_assert(not BatchInsertInProgress);
-    return std::upper_bound(begin(),
-                            end(),
-                            value_type { Key },
-                            compareElements);
+    return std::upper_bound(begin(), end(), value_type{ Key }, compareElements);
   }
 
   const_iterator upper_bound(const key_type &Key) const {
     revng_assert(not BatchInsertInProgress);
-    return std::upper_bound(begin(),
-                            end(),
-                            value_type { Key },
-                            compareElements);
+    return std::upper_bound(begin(), end(), value_type{ Key }, compareElements);
   }
 
 public:
@@ -322,7 +308,6 @@ public:
       revng_assert(SV.BatchInsertInProgress);
       SV.TheVector.push_back(Value);
     }
-
   };
 
   BatchInserter batch_insert() {
@@ -391,7 +376,6 @@ private:
     }
     TheVector.erase(NewEnd, end());
   }
-
 };
 
 #endif // SORTEDVECTOR_H

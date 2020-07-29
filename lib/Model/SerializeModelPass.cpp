@@ -11,7 +11,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/PassSupport.h"
 
-
 // Local libraries includes
 #include "revng/Model/SerializeModelPass.h"
 
@@ -19,10 +18,8 @@ using namespace llvm;
 
 char SerializeModelPass::ID;
 
-static RegisterPass<SerializeModelPass> X("serialize-model",
-                                          "Serialize the model",
-                                          true,
-                                          true);
+static RegisterPass<SerializeModelPass>
+  X("serialize-model", "Serialize the model", true, true);
 
 bool SerializeModelPass::runOnModule(Module &M) {
   auto &LMP = getAnalysis<LoadModelPass>();
@@ -37,10 +34,10 @@ bool SerializeModelPass::runOnModule(Module &M) {
 
   NamedMDNode *NamedMD = M.getNamedMetadata(ModelMetadataName);
   revng_assert(NamedMD == nullptr, "The model has alread been serialized");
-  
+
   NamedMD = M.getOrInsertNamedMetadata(ModelMetadataName);
-  NamedMD->addOperand(MDTuple::get(Context,
-                                   { MDString::get(Context, Buffer) }));
+  NamedMD->addOperand(
+    MDTuple::get(Context, { MDString::get(Context, Buffer) }));
 
   return false;
 }

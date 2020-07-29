@@ -6,24 +6,28 @@
 //
 
 // LLVM includes
-#include "llvm/Support/YAMLTraits.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/Support/YAMLTraits.h"
 
 // Local libraries includes
 #include "revng/Support/Assert.h"
 
 struct MetadataInput : public llvm::yaml::IO {
-  std::stack<llvm::Metadata *> Stack; 
+  std::stack<llvm::Metadata *> Stack;
 
   template<typename T>
-  T *top() { return llvm::cast<T>(Stack.top()); }
+  T *top() {
+    return llvm::cast<T>(Stack.top());
+  }
 
   MetadataInput(llvm::Metadata *Root) : IO(), Stack() { Stack.push(Root); }
   bool outputting() const override { return false; }
 
   unsigned beginSequence() override { revng_abort("Not implemented"); }
-  bool preflightElement(unsigned, void *&) override { revng_abort("Not implemented"); }
-  void postflightElement(void*) override {}
+  bool preflightElement(unsigned, void *&) override {
+    revng_abort("Not implemented");
+  }
+  void postflightElement(void *) override {}
   void endSequence() override {}
   bool canElideEmptySequence() override { revng_abort("Not implemented"); }
 
@@ -38,11 +42,11 @@ struct MetadataInput : public llvm::yaml::IO {
     return true;
   }
 
-  void postflightFlowElement(void*) override {
-    Stack.pop();
-  }
+  void postflightFlowElement(void *) override { Stack.pop(); }
 
-  bool mapTag(llvm::StringRef Tag, bool Default=false) override { revng_abort("Not implemented"); }
+  bool mapTag(llvm::StringRef Tag, bool Default = false) override {
+    revng_abort("Not implemented");
+  }
 
   void beginMapping() override {}
 
@@ -65,11 +69,11 @@ struct MetadataInput : public llvm::yaml::IO {
     return false;
   }
 
-  void postflightKey(void*) override {
-    Stack.pop();
-  }
+  void postflightKey(void *) override { Stack.pop(); }
 
-  std::vector<llvm::StringRef> keys() override { revng_abort("Not implemented"); }
+  std::vector<llvm::StringRef> keys() override {
+    revng_abort("Not implemented");
+  }
 
   void beginFlowMapping() override {}
   void endFlowMapping() override {}
@@ -82,7 +86,9 @@ struct MetadataInput : public llvm::yaml::IO {
   void endEnumScalar() override {}
 
   bool beginBitSetScalar(bool &) override { revng_abort("Not implemented"); }
-  bool bitSetMatch(const char*, bool) override { revng_abort("Not implemented"); }
+  bool bitSetMatch(const char *, bool) override {
+    revng_abort("Not implemented");
+  }
   void endBitSetScalar() override {}
 
   void scalarString(llvm::StringRef &String,
@@ -93,16 +99,20 @@ struct MetadataInput : public llvm::yaml::IO {
   void blockScalarString(llvm::StringRef &) override {}
   void scalarTag(std::string &) override {}
 
-  llvm::yaml::NodeKind getNodeKind() override { revng_abort("Not implemented"); }
+  llvm::yaml::NodeKind getNodeKind() override {
+    revng_abort("Not implemented");
+  }
 
-  void setError(const llvm::Twine &) override { revng_abort("Not implemented"); }
-
+  void setError(const llvm::Twine &) override {
+    revng_abort("Not implemented");
+  }
 };
 
 // Define non-member operator>> so that Input can stream in a map as a document.
-template <typename T>
-inline typename std::enable_if<llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
-                               MetadataInput &>::type
+template<typename T>
+inline typename std::enable_if<
+  llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
+  MetadataInput &>::type
 operator>>(MetadataInput &yin, T &docMap) {
   llvm::yaml::EmptyContext Ctx;
   // yin.setCurrentDocument();

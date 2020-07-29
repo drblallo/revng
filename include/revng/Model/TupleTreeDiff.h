@@ -8,58 +8,58 @@
 #include "llvm/Support/WithColor.h"
 
 // Local includes
-#include "revng/Model/TupleTree.h"
 #include "revng/ADT/KeyedObjectContainer.h"
+#include "revng/Model/TupleTree.h"
 
 template<typename>
 struct is_std_vector : std::false_type {};
 
 template<typename T, typename A>
-struct is_std_vector<std::vector<T,A>> : std::true_type {};
+struct is_std_vector<std::vector<T, A>> : std::true_type {};
 
 template<typename T>
 constexpr bool has_push_back_v = is_std_vector<T>::value;
 
-template<typename T, typename K=void>
+template<typename T, typename K = void>
 using enable_if_has_push_back_t = std::enable_if_t<has_push_back_v<T>, K>;
 
 template<typename T>
 constexpr bool has_insert_or_assign_v = not has_push_back_v<T>;
 
-template<typename T, typename K=void>
-using enable_if_has_insert_or_assign_t = std::enable_if_t<has_insert_or_assign_v<T>, K>;
+template<typename T, typename K = void>
+using enable_if_has_insert_or_assign_t = std::
+  enable_if_t<has_insert_or_assign_v<T>, K>;
 
 //
 // is_sorted_container
 //
 // TODO: this is not very nice
 template<typename T>
-constexpr bool is_sorted_container_v = (is_container_v<T>
-                                        and (is_KeyedObjectContainer_v<T>
-                                             or is_specialization_v<T,
-                                                                    std::set>));
+constexpr bool is_sorted_container_v =
+  (is_container_v<
+     T> and (is_KeyedObjectContainer_v<T> or is_specialization_v<T, std::set>));
 
 template<typename T>
-constexpr bool is_unsorted_container_v = (is_container_v<T>
-                                          and not is_sorted_container_v<T>);
+constexpr bool is_unsorted_container_v =
+  (is_container_v<T> and not is_sorted_container_v<T>);
 
-template<typename T, typename K=void>
-using enable_if_is_sorted_container_t = std::enable_if_t<is_sorted_container_v<T>, K>;
+template<typename T, typename K = void>
+using enable_if_is_sorted_container_t = std::
+  enable_if_t<is_sorted_container_v<T>, K>;
 
-template<typename T, typename K=void>
-using enable_if_is_unsorted_container_t = std::enable_if_t<is_unsorted_container_v<T>, K>;
+template<typename T, typename K = void>
+using enable_if_is_unsorted_container_t = std::
+  enable_if_t<is_unsorted_container_v<T>, K>;
 
 template<typename C>
 enable_if_has_insert_or_assign_t<C>
-addToContainer(C &Container,
-               const typename C::value_type &Value) {
+addToContainer(C &Container, const typename C::value_type &Value) {
   Container.insert_or_assign(Value);
 }
 
 template<typename C>
 enable_if_has_push_back_t<C>
-addToContainer(C &Container,
-               const typename C::value_type &Value) {
+addToContainer(C &Container, const typename C::value_type &Value) {
   Container.push_back(Value);
 }
 
@@ -112,13 +112,11 @@ struct Diff {
   }
 
 private:
-  template<size_t I=0, typename T>
-  enable_if_tuple_end_t<I, T>
-  diffTuple(T &LHS, T &RHS) {}
+  template<size_t I = 0, typename T>
+  enable_if_tuple_end_t<I, T> diffTuple(T &LHS, T &RHS) {}
 
-  template<size_t I=0, typename T>
-  enable_if_not_tuple_end_t<I, T>
-  diffTuple(T &LHS, T &RHS) {
+  template<size_t I = 0, typename T>
+  enable_if_not_tuple_end_t<I, T> diffTuple(T &LHS, T &RHS) {
     using child_type = typename std::tuple_element<I, T>::type;
 
     Stack.push_back(I);
@@ -130,14 +128,12 @@ private:
   }
 
   template<typename T>
-  enable_if_has_tuple_size_t<T>
-  diffImpl(T &LHS, T &RHS) {
+  enable_if_has_tuple_size_t<T> diffImpl(T &LHS, T &RHS) {
     diffTuple(LHS, RHS);
   }
 
   template<typename T>
-  enable_if_is_sorted_container_t<T>
-  diffImpl(T &LHS, T &RHS) {
+  enable_if_is_sorted_container_t<T> diffImpl(T &LHS, T &RHS) {
     using value_type = typename T::value_type;
     using KOT = KeyedObjectTraits<value_type>;
     using key_type = decltype(KOT::key(std::declval<value_type>()));
@@ -151,7 +147,8 @@ private:
         Result.remove(Stack, LHSElement);
       } else {
         // Identical
-        const auto &KeyInts = KeyTraits<key_type>::toInts(KOT::key(*LHSElement));
+        const auto &KeyInts = KeyTraits<key_type>::toInts(
+          KOT::key(*LHSElement));
         std::copy(KeyInts.begin(), KeyInts.end(), std::back_inserter(Stack));
 
         diffImpl(*LHSElement, *RHSElement);
@@ -163,8 +160,7 @@ private:
   }
 
   template<typename T>
-  enable_if_is_unsorted_container_t<T>
-  diffImpl(T &LHS, T &RHS) {
+  enable_if_is_unsorted_container_t<T> diffImpl(T &LHS, T &RHS) {
     using value_type = typename T::value_type;
     using KOT = KeyedObjectTraits<value_type>;
     using key_type = decltype(KOT::key(std::declval<value_type>()));
@@ -199,10 +195,9 @@ private:
     if (LHS != RHS)
       Result.change(Stack, &LHS, &RHS);
   }
-
 };
 
-}
+} // namespace tupletreediff::detail
 
 template<typename M>
 TupleTreeDiff<M> diff(M &LHS, M &RHS) {
@@ -241,7 +236,7 @@ void dumpWithPrefixAndColor(llvm::StringRef Prefix,
   }
 
   auto [LHS, RHS] = llvm::StringRef(Buffer).split('\n');
-  while(RHS.size() != 0) {
+  while (RHS.size() != 0) {
     Stream << Prefix << LHS << "\n";
     std::tie(LHS, RHS) = RHS.split('\n');
   }
@@ -262,15 +257,13 @@ struct DumpDiffVisitor {
   void visitContainerElement(KeyT Key) {}
 
   template<typename T>
-  enable_if_is_container_t<T>
-  visit() {
+  enable_if_is_container_t<T> visit() {
     revng_assert((Old != nullptr) != (New != nullptr));
     dump<typename T::value_type>();
   }
 
   template<typename T>
-  enable_if_is_not_container_t<T>
-  visit() {
+  enable_if_is_not_container_t<T> visit() {
     revng_assert(Old != nullptr and New != nullptr);
     dump<T>();
   }
@@ -289,12 +282,10 @@ struct DumpDiffVisitor {
                              llvm::raw_ostream::GREEN,
                              reinterpret_cast<T *>(New));
     }
-
   }
-
 };
 
-}
+} // namespace tupletreediff::detail
 
 template<typename T>
 inline void TupleTreeDiff<T>::dump() const {
@@ -310,9 +301,8 @@ inline void TupleTreeDiff<T>::dump() const {
       LastPath = C.Path;
     }
 
-    DumpDiffVisitor PV2 { C.Old, C.New };
+    DumpDiffVisitor PV2{ C.Old, C.New };
     callByPath<T>(PV2, C.Path);
-
   }
 }
 
@@ -349,12 +339,8 @@ struct ApplyDiffVisitor {
     if (C->Old != nullptr) {
       key_type Key = KOT::key(*reinterpret_cast<value_type *>(C->Old));
       auto End = M.end();
-      auto CompareKeys = [Key](value_type &V){
-                           return KOT::key(V) == Key;
-                         };
-      auto FirstToDelete = std::remove_if(M.begin(),
-                                          End,
-                                          CompareKeys);
+      auto CompareKeys = [Key](value_type &V) { return KOT::key(V) == Key; };
+      auto FirstToDelete = std::remove_if(M.begin(), End, CompareKeys);
       M.erase(FirstToDelete, End);
       revng_assert(OldSize == M.size() + 1);
     } else if (C->New != nullptr) {
@@ -375,16 +361,15 @@ struct ApplyDiffVisitor {
     revng_check(*Old == M);
     M = *New;
   }
-
 };
 
-}
+} // namespace tupletreediff::detail
 
 template<typename T>
 inline void TupleTreeDiff<T>::apply(T &M) const {
   KeyIntVector LastPath;
   for (const Change &C : Changes) {
-    tupletreediff::detail::ApplyDiffVisitor<T> ADV { &C };
+    tupletreediff::detail::ApplyDiffVisitor<T> ADV{ &C };
     callByPath(ADV, C.Path, M);
   }
 }

@@ -18,7 +18,7 @@ namespace model {
 class Function;
 class Binary;
 class FunctionEdge;
-}
+} // namespace model
 
 //
 // FunctionEdgeType
@@ -51,7 +51,7 @@ enum Values {
   /// The basic block ends with an unreachable instruction
   Unreachable
 };
-} // namespace FunctionEdgeType
+} // namespace model::FunctionEdgeType
 
 namespace llvm::yaml {
 template<>
@@ -72,7 +72,7 @@ struct ScalarEnumerationTraits<model::FunctionEdgeType::Values> {
     io.enumCase(V, "Unreachable", Unreachable);
   }
 };
-}
+} // namespace llvm::yaml
 
 //
 // FunctionEdge
@@ -84,11 +84,8 @@ public:
   FunctionEdgeType::Values Type;
 
   bool operator<(const FunctionEdge &Other) const {
-    return std::tie(Source,
-                    Destination,
-                    Type) < std::tie(Other.Source,
-                                     Other.Destination,
-                                     Other.Type);
+    return std::tie(Source, Destination, Type)
+           < std::tie(Other.Source, Other.Destination, Other.Type);
   }
 };
 INTROSPECTION_NS(model, FunctionEdge, Source, Destination, Type);
@@ -124,7 +121,7 @@ struct ScalarEnumerationTraits<model::FunctionType::Values> {
     io.enumCase(V, "Fake", Fake);
   }
 };
-}
+} // namespace llvm::yaml
 
 //
 // Function

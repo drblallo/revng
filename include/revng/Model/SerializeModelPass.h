@@ -18,10 +18,9 @@ public:
     AU.setPreservesAll();
     AU.addRequired<LoadModelPass>();
   }
-    
+
 public:
   bool runOnModule(llvm::Module &M) override final;
-
 };
 
 #endif // MODEL_SERIALIZEMODELPASS_H

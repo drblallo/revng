@@ -25,7 +25,7 @@ bool init_unit_test();
 
 using namespace llvm;
 
-template<typename T, typename=void>
+template<typename T, typename = void>
 struct KeyContainer {};
 
 template<typename T>
@@ -44,15 +44,14 @@ struct KeyContainer<T, enable_if_is_map_like_t<T>> {
 };
 
 template<typename T>
-struct KeyContainer<T, std::enable_if_t<is_set_like_v<T>
-                                        or is_KeyedObjectContainer_v<T>>> {
+struct KeyContainer<
+  T,
+  std::enable_if_t<is_set_like_v<T> or is_KeyedObjectContainer_v<T>>> {
   using key_type = const typename T::key_type;
 
   static void insert(T &Container, key_type Key) { Container.insert(Key); }
 
-  static auto find(T &Container, key_type Key) {
-    return &*Container.find(Key);
-  }
+  static auto find(T &Container, key_type Key) { return &*Container.find(Key); }
 
   static void sort(T &) {}
 };
@@ -113,7 +112,7 @@ compare(T &Left,
   };
 
   for (unsigned I = 0; I < Result.size(); I++) {
-    std::pair<pointer, pointer> X { FindLeft(I), FindRight(I) };
+    std::pair<pointer, pointer> X{ FindLeft(I), FindRight(I) };
     revng_check(Result[I] == X);
   }
 }

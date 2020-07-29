@@ -19,12 +19,9 @@ bool init_unit_test();
 #include "TestKeyedObject.h"
 
 template<typename T>
-static void assertInsert(T &Set,
-                         uint64_t Key,
-                         uint64_t Value) {
+static void assertInsert(T &Set, uint64_t Key, uint64_t Value) {
   auto [It, Success] = Set.insert({ Key, Value });
-  revng_check(It->key() == Key
-              and It->value() == Value);
+  revng_check(It->key() == Key and It->value() == Value);
   revng_check(Success);
 }
 
@@ -42,11 +39,9 @@ void testSet() {
   revng_check(Set.size() == 3);
 
   using IterationResultType = std::vector<std::pair<uint64_t, uint64_t>>;
-  IterationResultType ExpectedResult {
-    { 0x1000, 0xDEADDEAD },
-    { 0x2000, 0xDEAD },
-    { 0x3000, 0xDEADDEADDEAD }
-  };
+  IterationResultType ExpectedResult{ { 0x1000, 0xDEADDEAD },
+                                      { 0x2000, 0xDEAD },
+                                      { 0x3000, 0xDEADDEADDEAD } };
 
   // Test forward iteration
   {
@@ -143,8 +138,7 @@ void testSet() {
   Set.clear();
 
   revng_check(Set.empty());
-  revng_check(Set.size() == 0);  
-
+  revng_check(Set.size() == 0);
 }
 
 BOOST_AUTO_TEST_CASE(TestMutableSet) {
@@ -159,23 +153,16 @@ BOOST_AUTO_TEST_CASE(TestUniqueLast) {
   using IntPair = std::pair<int, int>;
   using Vector = std::vector<IntPair>;
   Vector TheVector = {
-    {1, 1},
-    {1, 2},
-    {1, 3},
-    {2, 1},
-    {2, 2},
-    {2, 3},
+    { 1, 1 }, { 1, 2 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 },
   };
 
-  auto Comparator = [] (const IntPair &LHS, const IntPair &RHS) {
+  auto Comparator = [](const IntPair &LHS, const IntPair &RHS) {
     return LHS.first == RHS.first;
   };
 
-  TheVector.erase(unique_last(TheVector.begin(),
-                              TheVector.end(),
-                              Comparator),
+  TheVector.erase(unique_last(TheVector.begin(), TheVector.end(), Comparator),
                   TheVector.end());
 
-  Vector Expected = { {1, 3}, {2, 3} };
+  Vector Expected = { { 1, 3 }, { 2, 3 } };
   revng_check(TheVector == Expected);
 }

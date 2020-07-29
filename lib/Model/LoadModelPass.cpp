@@ -11,7 +11,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/PassSupport.h"
 
-
 // Local libraries includes
 #include "revng/Model/LoadModelPass.h"
 
@@ -19,10 +18,8 @@ using namespace llvm;
 
 char LoadModelPass::ID;
 
-static RegisterPass<LoadModelPass> X("load-model",
-                                     "Deserialize the model",
-                                     true,
-                                     true);
+static RegisterPass<LoadModelPass>
+  X("load-model", "Deserialize the model", true, true);
 
 bool LoadModelPass::doInitialization(Module &M) {
   NamedMDNode *NamedMD = M.getNamedMetadata(ModelMetadataName);

@@ -15,11 +15,11 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
 
+#include "revng/Model/Binary.h"
 #include "revng/StackAnalysis/StackAnalysis.h"
 #include "revng/Support/CommandLine.h"
 #include "revng/Support/IRHelpers.h"
 #include "revng/Support/MetadataOutput.h"
-#include "revng/Model/Binary.h"
 
 #include "Cache.h"
 #include "InterproceduralAnalysis.h"
@@ -60,7 +60,6 @@ static void benchmark(T Function) {
   for (unsigned I = 0; I < 10; I++)
     Function();
 
-
   typedef std::chrono::high_resolution_clock Clock;
   auto t1 = Clock::now();
   for (unsigned I = 0; I < 100; I++)
@@ -68,7 +67,6 @@ static void benchmark(T Function) {
   auto t2 = Clock::now();
   llvm::outs() << (t2 - t1).count() << '\n';
 }
-
 
 template<>
 char StackAnalysis<false>::ID = 0;
@@ -82,8 +80,8 @@ static opt<std::string> ABIAnalysisOutputPath("abi-analysis-output",
                                               value_desc("path"),
                                               cat(MainCategory));
 
-static void commitToModel(const FunctionsSummary &Summary,
-                          model::Binary &TheBinary) {
+static void
+commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
   using namespace model;
 
   for (const auto &[Entry, FunctionSummary] : Summary.Functions) {
@@ -101,7 +99,8 @@ static void commitToModel(const FunctionsSummary &Summary,
     // Assign a name
     Function.Name = Entry->getName();
 
-    Function.Type = static_cast<model::FunctionType::Values>(FunctionSummary.Type);
+    Function.Type = static_cast<model::FunctionType::Values>(
+      FunctionSummary.Type);
 
     for (const auto &[Block, Branch] : FunctionSummary.BasicBlocks) {
       // Remap BranchType to FunctionEdgeType
@@ -164,7 +163,6 @@ static void commitToModel(const FunctionsSummary &Summary,
       case BranchType::Unreachable:
         EdgeType = FET::Unreachable;
         break;
-
       }
 
       if (EdgeType == FET::Invalid)
@@ -180,13 +178,11 @@ static void commitToModel(const FunctionsSummary &Summary,
         Destination = getBasicBlockPC(Successor);
 
       // Record the edge in the CFG
-      FunctionEdge NewEdge { Source, Destination, EdgeType };
+      FunctionEdge NewEdge{ Source, Destination, EdgeType };
       revng_assert(Function.CFG.count(NewEdge) == 0);
       Function.CFG.insert(NewEdge);
     }
-
   }
-
 }
 
 template<bool AnalyzeABI>

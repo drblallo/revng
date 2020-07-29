@@ -6,15 +6,15 @@
 //
 
 // Standard includes
-#include <vector>
 #include <stack>
 #include <utility>
+#include <vector>
 
 // LLVM includes
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/YAMLTraits.h"
-#include "llvm/IR/Metadata.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/Support/YAMLTraits.h"
 
 // Local libraries includes
 #include "revng/Support/Assert.h"
@@ -22,8 +22,8 @@
 struct MetadataOutput : public llvm::yaml::IO {
   llvm::LLVMContext &C;
 
-  std::stack<std::vector<std::pair<llvm::Metadata *,
-                                   llvm::Metadata *>>> MappingStack;
+  std::stack<std::vector<std::pair<llvm::Metadata *, llvm::Metadata *>>>
+    MappingStack;
   std::stack<std::vector<llvm::Metadata *>> FlowSequenceStack;
 
 private:
@@ -53,10 +53,8 @@ public:
     FlowSequenceStack.push({});
     return 0;
   }
-  bool preflightElement(unsigned I, void *&) override {
-    return true;
-  }
-  void postflightElement(void*) override {
+  bool preflightElement(unsigned I, void *&) override { return true; }
+  void postflightElement(void *) override {
     FlowSequenceStack.top().push_back(consume());
   }
   void endSequence() override {
@@ -79,15 +77,15 @@ public:
     return true;
   }
 
-  void postflightFlowElement(void*) override {
+  void postflightFlowElement(void *) override {
     FlowSequenceStack.top().push_back(consume());
   }
 
-  bool mapTag(llvm::StringRef Tag, bool Default=false) override { revng_abort("Not implemented"); }
-
-  void beginMapping() override {
-    MappingStack.push({});
+  bool mapTag(llvm::StringRef Tag, bool Default = false) override {
+    revng_abort("Not implemented");
   }
+
+  void beginMapping() override { MappingStack.push({}); }
 
   void endMapping() override {
     using namespace llvm;
@@ -111,11 +109,13 @@ public:
     return true;
   }
 
-  void postflightKey(void*) override {
+  void postflightKey(void *) override {
     MappingStack.top().back().second = consume();
   }
 
-  std::vector<llvm::StringRef> keys() override { revng_abort("Not implemented"); }
+  std::vector<llvm::StringRef> keys() override {
+    revng_abort("Not implemented");
+  }
 
   void beginFlowMapping() override {}
   void endFlowMapping() override {}
@@ -131,7 +131,9 @@ public:
   void endEnumScalar() override {}
 
   bool beginBitSetScalar(bool &) override { revng_abort("Not implemented"); }
-  bool bitSetMatch(const char*, bool) override { revng_abort("Not implemented"); }
+  bool bitSetMatch(const char *, bool) override {
+    revng_abort("Not implemented");
+  }
   void endBitSetScalar() override {}
 
   void scalarString(llvm::StringRef &String,
@@ -142,15 +144,19 @@ public:
   void blockScalarString(llvm::StringRef &) override {}
   void scalarTag(std::string &) override {}
 
-  llvm::yaml::NodeKind getNodeKind() override { revng_abort("Not implemented"); }
+  llvm::yaml::NodeKind getNodeKind() override {
+    revng_abort("Not implemented");
+  }
 
-  void setError(const llvm::Twine &) override { revng_abort("Not implemented"); }
-
+  void setError(const llvm::Twine &) override {
+    revng_abort("Not implemented");
+  }
 };
 
-template <typename T>
-inline typename std::enable_if<llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
-                               MetadataOutput &>::type
+template<typename T>
+inline typename std::enable_if<
+  llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
+  MetadataOutput &>::type
 operator<<(MetadataOutput &yout, T &map) {
   llvm::yaml::EmptyContext Ctx;
   yamlize(yout, map, true, Ctx);

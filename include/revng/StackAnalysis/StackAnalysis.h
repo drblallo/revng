@@ -10,8 +10,8 @@
 
 #include "revng/BasicAnalyses/GeneratedCodeBasicInfo.h"
 #include "revng/FunctionCallIdentification/FunctionCallIdentification.h"
-#include "revng/StackAnalysis/FunctionsSummary.h"
 #include "revng/Model/LoadModelPass.h"
+#include "revng/StackAnalysis/FunctionsSummary.h"
 
 namespace StackAnalysis {
 

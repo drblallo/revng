@@ -32,7 +32,6 @@ public:
     Modified = true;
     return TheBinary;
   }
-
 };
 
 #endif // MODEL_LOADMODELPASS_H

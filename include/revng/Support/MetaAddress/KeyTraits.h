@@ -22,18 +22,15 @@ struct KeyTraits<MetaAddress> {
   }
 
   static IntsArray toInts(const MetaAddress &MA) {
-    return {
-      MA.epoch(),
-      MA.addressSpace(),
-      static_cast<uint16_t>(MA.type()),
-      MA.address()
-    };
+    return { MA.epoch(),
+             MA.addressSpace(),
+             static_cast<uint16_t>(MA.type()),
+             MA.address() };
   }
 
   static std::string toString(const MetaAddress &Value) {
     return Value.toString();
   }
-
 };
 
 #endif // SUPPORT_METAADDRESS_KEYTRAITS_H

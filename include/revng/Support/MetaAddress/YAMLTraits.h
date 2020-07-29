@@ -12,15 +12,12 @@
 template<>
 struct llvm::yaml::ScalarTraits<MetaAddress> {
 
-  static void output(const MetaAddress &Value,
-                     void *,
-                     llvm::raw_ostream &Output) {
+  static void
+  output(const MetaAddress &Value, void *, llvm::raw_ostream &Output) {
     Output << Value.toString();
   }
 
-  static StringRef input(llvm::StringRef Scalar,
-                         void *,
-                         MetaAddress &Value) {
+  static StringRef input(llvm::StringRef Scalar, void *, MetaAddress &Value) {
     Value = MetaAddress::fromString(Scalar);
     return StringRef();
   }
