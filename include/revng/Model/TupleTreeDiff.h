@@ -34,10 +34,18 @@ using enable_if_has_insert_or_assign_t = std::
 // is_sorted_container
 //
 // TODO: this is not very nice
+namespace detail {
+
 template<typename T>
-constexpr bool is_sorted_container_v =
-  (is_container_v<
-     T> and (is_KeyedObjectContainer_v<T> or is_specialization_v<T, std::set>));
+constexpr bool is_set_v = is_specialization_v<T, std::set>;
+
+template<typename T>
+constexpr bool is_sc_v = is_set_v<T> or is_KeyedObjectContainer_v<T>;
+
+} // namespace detail
+
+template<typename T>
+constexpr bool is_sorted_container_v = detail::is_sc_v<T>;
 
 template<typename T>
 constexpr bool is_unsorted_container_v =
@@ -147,8 +155,8 @@ private:
         Result.remove(Stack, LHSElement);
       } else {
         // Identical
-        const auto &KeyInts = KeyTraits<key_type>::toInts(
-          KOT::key(*LHSElement));
+        using KT = KeyTraits<key_type>;
+        const auto &KeyInts = KT::toInts(KOT::key(*LHSElement));
         std::copy(KeyInts.begin(), KeyInts.end(), std::back_inserter(Stack));
 
         diffImpl(*LHSElement, *RHSElement);

@@ -24,11 +24,14 @@ namespace tupletree::detail {
 using namespace llvm::yaml;
 
 template<typename T>
-constexpr bool has_yaml_v =
-  (has_DocumentListTraits<T>::value or has_MappingTraits<T, EmptyContext>::value
-   or has_SequenceTraits<T>::value or has_BlockScalarTraits<T>::value
-   or has_CustomMappingTraits<T>::value or has_PolymorphicTraits<T>::value
-   or has_ScalarTraits<T>::value or has_ScalarEnumerationTraits<T>::value);
+constexpr bool has_yaml_v = has_DocumentListTraits<T>::value
+                            or has_MappingTraits<T, EmptyContext>::value
+                            or has_SequenceTraits<T>::value
+                            or has_BlockScalarTraits<T>::value
+                            or has_CustomMappingTraits<T>::value
+                            or has_PolymorphicTraits<T>::value
+                            or has_ScalarTraits<T>::value
+                            or has_ScalarEnumerationTraits<T>::value;
 
 struct NoYaml {};
 
@@ -142,16 +145,25 @@ static_assert(is_string_like_v<llvm::StringRef>);
 //
 // is_container
 //
+
 template<typename T>
 constexpr bool is_container_v = is_iterable_v<T> and not is_string_like_v<T>;
 
+namespace detail {
 template<typename T>
-constexpr bool
-  is_container_or_tuple_v = (is_container_v<T> or has_tuple_size_v<T>);
+constexpr bool is_cot_v = is_container_v<T> or has_tuple_size_v<T>;
+} // namespace detail
+
+template<typename T>
+constexpr bool is_container_or_tuple_v = detail::is_cot_v<T>;
+
+namespace detail {
+template<typename T, typename K = void>
+using ei_not_cot_t = std::enable_if_t<!is_container_or_tuple_v<T>, K>;
+} // namespace detail
 
 template<typename T, typename K = void>
-using enable_if_is_not_container_or_tuple_t = std::
-  enable_if_t<!is_container_or_tuple_v<T>, K>;
+using enable_if_is_not_container_or_tuple_t = detail::ei_not_cot_t<T, K>;
 
 static_assert(is_container_v<std::vector<int>>);
 static_assert(is_container_v<std::set<int>>);

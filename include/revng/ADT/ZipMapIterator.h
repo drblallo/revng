@@ -76,9 +76,15 @@ constexpr bool same_key_value_v = std::is_same_v<typename T::key_type,
 template<class T, class Enable = void>
 struct same_key_value_types : std::false_type {};
 
+namespace detail {
+
+template<typename T>
+using ei_skv_t = std::enable_if_t<
+  std::is_same_v<typename T::key_type, typename T::value_type>>;
+}
+
 template<class T>
-struct same_key_value_types<T, std::enable_if_t<detail::same_key_value_v<T>>>
-  : std::true_type {};
+struct same_key_value_types<T, detail::ei_skv_t<T>> : std::true_type {};
 
 template<typename T>
 constexpr bool is_set_like_v = (has_value_type_member<T>::value

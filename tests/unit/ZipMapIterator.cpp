@@ -57,7 +57,8 @@ struct KeyContainer<
 };
 
 template<typename T>
-struct KeyContainer<T, typename std::enable_if_t<isVectorOfPairs<T>::value>> {
+struct KeyContainer<T,
+                    typename std::enable_if_t<is_vector_of_pairs<T>::value>> {
   using key_type = typename T::value_type::first_type;
   using value_type = std::conditional_t<std::is_const<T>::value,
                                         const typename T::value_type,
