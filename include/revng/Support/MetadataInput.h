@@ -11,6 +11,7 @@
 
 // Local libraries includes
 #include "revng/Support/Assert.h"
+#include "revng/Support/YAMLTraits.h"
 
 struct MetadataInput : public llvm::yaml::IO {
   std::stack<llvm::Metadata *> Stack;
@@ -108,11 +109,10 @@ struct MetadataInput : public llvm::yaml::IO {
   }
 };
 
-// Define non-member operator>> so that Input can stream in a map as a document.
+// Define non-member operator>> so that Input can stream in a map as a
+// document.
 template<typename T>
-inline typename std::enable_if<
-  llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
-  MetadataInput &>::type
+inline enable_if_has_MappingTraits<T, MetadataInput &>
 operator>>(MetadataInput &yin, T &docMap) {
   llvm::yaml::EmptyContext Ctx;
   // yin.setCurrentDocument();

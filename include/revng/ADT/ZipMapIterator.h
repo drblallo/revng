@@ -78,10 +78,16 @@ struct same_key_value_types : std::false_type {};
 
 namespace detail {
 
+template<bool B>
+using ei_t = std::enable_if_t<B>;
+
+template<typename A, typename B>
+constexpr bool same = std::is_same_v<A, B>;
+
 template<typename T>
-using ei_skv_t = std::enable_if_t<
-  std::is_same_v<typename T::key_type, typename T::value_type>>;
-}
+using ei_skv_t = ei_t<same<typename T::key_type, typename T::value_type>>;
+
+} // namespace detail
 
 template<class T>
 struct same_key_value_types<T, detail::ei_skv_t<T>> : std::true_type {};

@@ -18,6 +18,7 @@
 
 // Local libraries includes
 #include "revng/Support/Assert.h"
+#include "revng/Support/YAMLTraits.h"
 
 struct MetadataOutput : public llvm::yaml::IO {
   llvm::LLVMContext &C;
@@ -29,20 +30,20 @@ struct MetadataOutput : public llvm::yaml::IO {
 private:
   llvm::Metadata *LastResult;
   llvm::Metadata *consume() {
-    assert(LastResult != nullptr);
+    revng_assert(LastResult != nullptr);
     llvm::Metadata *Result = LastResult;
     LastResult = nullptr;
     return Result;
   }
 
   void produce(llvm::Metadata *MD) {
-    assert(LastResult == nullptr);
+    revng_assert(LastResult == nullptr);
     LastResult = MD;
   }
 
 public:
   llvm::Metadata *getResult() const {
-    assert(LastResult != nullptr);
+    revng_assert(LastResult != nullptr);
     return LastResult;
   }
 
@@ -154,9 +155,7 @@ public:
 };
 
 template<typename T>
-inline typename std::enable_if<
-  llvm::yaml::has_MappingTraits<T, llvm::yaml::EmptyContext>::value,
-  MetadataOutput &>::type
+inline enable_if_has_MappingTraits<T, MetadataOutput &>
 operator<<(MetadataOutput &yout, T &map) {
   llvm::yaml::EmptyContext Ctx;
   yamlize(yout, map, true, Ctx);
