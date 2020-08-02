@@ -7,16 +7,6 @@
 // Local libraries includes
 #include "revng/ADT/KeyedObjectTraits.h"
 
-template<typename A, typename B>
-inline B &getSecond(std::pair<A, B> &Pair) {
-  return Pair.second;
-}
-
-template<typename A, typename B>
-inline const B &getConstSecond(const std::pair<A, B> &Pair) {
-  return Pair.second;
-}
-
 template<typename T>
 class MutableSet {
 private:
@@ -43,26 +33,29 @@ private:
   using inner_iterator = typename map_type::iterator;
   using const_inner_iterator = typename map_type::const_iterator;
   using inner_reverse_iterator = typename map_type::reverse_iterator;
-  using const_inner_reverse_iterator = typename map_type::
-    const_reverse_iterator;
+  using ciri = typename map_type::const_reverse_iterator;
+  using const_inner_reverse_iterator = ciri;
 
 private:
   template<typename A, typename B>
   using mapped_iterator = llvm::mapped_iterator<A, B>;
 
+private:
+  using pair = std::pair<key_type, inner_mapped_type>;
+  static inner_mapped_type &getSecond(pair &Pair) { return Pair.second; }
+
+  static const inner_mapped_type &getConstSecond(const pair &Pair) {
+    return Pair.second;
+  }
+
 public:
-  using iterator = mapped_iterator<inner_iterator,
-                                   decltype(
-                                     getSecond<key_type, inner_mapped_type>) *>;
-  using const_iterator = mapped_iterator<
-    const_inner_iterator,
-    decltype(getConstSecond<key_type, inner_mapped_type>) *>;
-  using reverse_iterator = mapped_iterator<
-    inner_reverse_iterator,
-    decltype(getSecond<key_type, inner_mapped_type>) *>;
-  using const_reverse_iterator = mapped_iterator<
-    const_inner_reverse_iterator,
-    decltype(getConstSecond<key_type, inner_mapped_type>) *>;
+  using iterator = mapped_iterator<inner_iterator, decltype(getSecond) *>;
+  using const_iterator = mapped_iterator<const_inner_iterator,
+                                         decltype(getConstSecond) *>;
+  using reverse_iterator = mapped_iterator<inner_reverse_iterator,
+                                           decltype(getSecond) *>;
+  using const_reverse_iterator = mapped_iterator<const_inner_reverse_iterator,
+                                                 decltype(getConstSecond) *>;
 
 private:
   map_type TheMap;
@@ -129,8 +122,8 @@ public:
     return wrapIterator(TheMap.erase(unwrapIterator(Pos)));
   }
   iterator erase(iterator First, iterator Last) {
-    return wrapIterator(
-      TheMap.erase(unwrapIterator(First), unwrapIterator(Last)));
+    auto It = TheMap.erase(unwrapIterator(First), unwrapIterator(Last));
+    return wrapIterator(It);
   }
 
   size_type erase(const key_type &Key) { return TheMap.erase(Key); }
@@ -192,20 +185,19 @@ private:
   }
 
   static iterator wrapIterator(inner_iterator It) {
-    return iterator(It, getSecond<key_type, inner_mapped_type>);
+    return iterator(It, getSecond);
   }
 
   static const_iterator wrapIterator(const_inner_iterator It) {
-    return const_iterator(It, getConstSecond<key_type, inner_mapped_type>);
+    return const_iterator(It, getConstSecond);
   }
 
   static reverse_iterator wrapIterator(inner_reverse_iterator It) {
-    return reverse_iterator(It, getSecond<key_type, inner_mapped_type>);
+    return reverse_iterator(It, getSecond);
   }
 
   static const_reverse_iterator wrapIterator(const_inner_reverse_iterator It) {
-    return const_reverse_iterator(It,
-                                  getConstSecond<key_type, inner_mapped_type>);
+    return const_reverse_iterator(It, getConstSecond);
   }
 };
 

@@ -84,8 +84,9 @@ public:
   FunctionEdgeType::Values Type;
 
   bool operator<(const FunctionEdge &Other) const {
-    return std::tie(Source, Destination, Type)
-           < std::tie(Other.Source, Other.Destination, Other.Type);
+    auto ThisTie = std::tie(Source, Destination, Type);
+    auto OtherTie = std::tie(Other.Source, Other.Destination, Other.Type);
+    return ThisTie < OtherTie;
   }
 };
 INTROSPECTION_NS(model, FunctionEdge, Source, Destination, Type);

@@ -17,15 +17,33 @@ class SortedVector;
 //
 // is_KeyedObjectContainer
 //
+namespace detail {
+
 template<typename T>
-constexpr bool is_KeyedObjectContainer_v =
-  (is_specialization_v<
-     std::remove_cv_t<T>,
-     MutableSet> or is_specialization_v<std::remove_cv_t<T>, SortedVector>);
+using no_cv_t = std::remove_cv_t<T>;
+
+template<typename T, template<typename...> class Ref>
+constexpr bool is_no_cv_specialization_v = is_specialization_v<no_cv_t<T>, Ref>;
+
+template<typename T>
+constexpr bool is_mutableset_v = is_no_cv_specialization_v<T, MutableSet>;
+
+template<typename T>
+constexpr bool is_sortedvector_v = is_no_cv_specialization_v<T, SortedVector>;
+
+template<typename T>
+constexpr bool is_KOC_v = is_mutableset_v<T> or is_sortedvector_v<T>;
 
 template<typename T, typename K = void>
-using enable_if_is_KeyedObjectContainer_t = std::
-  enable_if_t<is_KeyedObjectContainer_v<T>, K>;
+using enable_if_is_KOC_t = std::enable_if_t<is_KOC_v<T>, K>;
+
+} // namespace detail
+
+template<typename T>
+constexpr bool is_KeyedObjectContainer_v = detail::is_KOC_v<T>;
+
+template<typename T, typename K = void>
+using enable_if_is_KeyedObjectContainer_t = detail::enable_if_is_KOC_t<T, K>;
 
 static_assert(is_KeyedObjectContainer_v<MutableSet<int>>);
 static_assert(is_KeyedObjectContainer_v<SortedVector<int>>);
@@ -53,10 +71,9 @@ yamlize(llvm::yaml::IO &io, T &Seq, bool, Context &Ctx) {
       void *SaveInfo;
       if (io.preflightElement(I, SaveInfo)) {
         using value_type = typename T::value_type;
-        using key_type = decltype(
-          KeyedObjectTraits<value_type>::key(std::declval<value_type>()));
-        value_type Instance = KeyedObjectTraits<value_type>::fromKey(
-          key_type());
+        using KOT = KeyedObjectTraits<value_type>;
+        using key_type = decltype(KOT::key(std::declval<value_type>()));
+        value_type Instance = KOT::fromKey(key_type());
         yamlize(io, Instance, true, Ctx);
         Inserter.insert(Instance);
         io.postflightElement(SaveInfo);

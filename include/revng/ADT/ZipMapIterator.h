@@ -18,12 +18,22 @@
 //
 // has_mapped_type_member
 //
+
+namespace detail {
+
+template<typename T>
+using eit_mt_t = typename enable_if_type<typename T::mapped_type>::type;
+
+template<typename T>
+using eit_vt_t = typename enable_if_type<typename T::value_type>::type;
+
+} // namespace detail
+
 template<class T, class Enable = void>
 struct has_mapped_type_member : std::false_type {};
+
 template<class T>
-struct has_mapped_type_member<
-  T,
-  typename enable_if_type<typename T::mapped_type>::type> : std::true_type {};
+struct has_mapped_type_member<T, detail::eit_mt_t<T>> : std::true_type {};
 
 //
 // has_value_type_member
@@ -31,9 +41,7 @@ struct has_mapped_type_member<
 template<class T, class Enable = void>
 struct has_value_type_member : std::false_type {};
 template<class T>
-struct has_value_type_member<
-  T,
-  typename enable_if_type<typename T::value_type>::type> : std::true_type {};
+struct has_value_type_member<T, detail::eit_vt_t<T>> : std::true_type {};
 
 //
 // has_key_type_member
@@ -59,13 +67,17 @@ using enable_if_is_map_like_t = std::enable_if_t<is_map_like_v<T>, K>;
 //
 // is_set_like
 //
+namespace detail {
+template<typename T>
+constexpr bool same_key_value_v = std::is_same_v<typename T::key_type,
+                                                 typename T::value_type>;
+}
+
 template<class T, class Enable = void>
 struct same_key_value_types : std::false_type {};
+
 template<class T>
-struct same_key_value_types<
-  T,
-  std::enable_if_t<
-    std::is_same_v<typename T::key_type, typename T::value_type>>>
+struct same_key_value_types<T, std::enable_if_t<detail::same_key_value_v<T>>>
   : std::true_type {};
 
 template<typename T>
@@ -77,27 +89,27 @@ constexpr bool is_set_like_v = (has_value_type_member<T>::value
 template<typename T, typename K = void>
 using enable_if_is_set_like_t = std::enable_if_t<is_set_like_v<T>, K>;
 
-// WIP: normalize capitalization
 //
-// isVectorOfPairs
+// is_vector_of_pairs
 //
 template<typename>
-struct isVectorOfPairs : public std::false_type {};
+struct is_vector_of_pairs : public std::false_type {};
 
 template<typename K, typename V>
-struct isVectorOfPairs<std::vector<std::pair<const K, V>>>
+struct is_vector_of_pairs<std::vector<std::pair<const K, V>>>
   : public std::true_type {};
 
 template<typename K, typename V>
-struct isVectorOfPairs<const std::vector<std::pair<const K, V>>>
+struct is_vector_of_pairs<const std::vector<std::pair<const K, V>>>
   : public std::true_type {};
 
 namespace {
 
 using namespace std;
 
-static_assert(isVectorOfPairs<vector<pair<const int, long>>>::value, "");
-static_assert(isVectorOfPairs<const vector<pair<const int, long>>>::value, "");
+static_assert(is_vector_of_pairs<vector<pair<const int, long>>>::value, "");
+static_assert(is_vector_of_pairs<const vector<pair<const int, long>>>::value,
+              "");
 
 } // namespace
 
@@ -120,7 +132,7 @@ keyFromValue(const typename T::value_type &Value) {
 }
 
 template<typename T>
-std::enable_if_t<isVectorOfPairs<T>::value,
+std::enable_if_t<is_vector_of_pairs<T>::value,
                  const typename T::value_type::first_type &>
 keyFromValue(const typename T::value_type &Value) {
   return Value.first;
