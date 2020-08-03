@@ -18,8 +18,10 @@ using namespace llvm;
 
 char LoadModelPass::ID;
 
-static RegisterPass<LoadModelPass>
-  X("load-model", "Deserialize the model", true, true);
+template<typename T>
+using RP = RegisterPass<T>;
+
+static RP<LoadModelPass> X("load-model", "Deserialize the model", true, true);
 
 bool LoadModelPass::doInitialization(Module &M) {
   NamedMDNode *NamedMD = M.getNamedMetadata(ModelMetadataName);

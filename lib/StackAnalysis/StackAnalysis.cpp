@@ -99,8 +99,8 @@ commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
     // Assign a name
     Function.Name = Entry->getName();
 
-    Function.Type = static_cast<model::FunctionType::Values>(
-      FunctionSummary.Type);
+    using FT = model::FunctionType::Values;
+    Function.Type = static_cast<FT>(FunctionSummary.Type);
 
     for (const auto &[Block, Branch] : FunctionSummary.BasicBlocks) {
       // Remap BranchType to FunctionEdgeType

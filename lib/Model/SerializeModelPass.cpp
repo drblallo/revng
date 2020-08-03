@@ -18,7 +18,10 @@ using namespace llvm;
 
 char SerializeModelPass::ID;
 
-static RegisterPass<SerializeModelPass>
+template<typename T>
+using RP = RegisterPass<T>;
+
+static RP<SerializeModelPass>
   X("serialize-model", "Serialize the model", true, true);
 
 bool SerializeModelPass::runOnModule(Module &M) {
@@ -36,8 +39,8 @@ bool SerializeModelPass::runOnModule(Module &M) {
   revng_assert(NamedMD == nullptr, "The model has alread been serialized");
 
   NamedMD = M.getOrInsertNamedMetadata(ModelMetadataName);
-  NamedMD->addOperand(
-    MDTuple::get(Context, { MDString::get(Context, Buffer) }));
+  auto Tuple = MDTuple::get(Context, { MDString::get(Context, Buffer) });
+  NamedMD->addOperand(Tuple);
 
   return false;
 }

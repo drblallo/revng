@@ -2,6 +2,7 @@
 #define TUPLETREEDIFF_H
 
 // Standard includes
+#include <set>
 #include <vector>
 
 // LLVM includes
@@ -33,47 +34,6 @@ using ei_hioa_t = std::enable_if_t<has_insert_or_assign_v<T>, K>;
 
 template<typename T, typename K = void>
 using enable_if_has_insert_or_assign_t = detail::ei_hioa_t<T, K>;
-
-//
-// is_sorted_container
-//
-// TODO: this is not very nice
-namespace detail {
-
-template<typename T>
-constexpr bool is_set_v = is_specialization_v<T, std::set>;
-
-template<typename T>
-constexpr bool is_sc_v = is_set_v<T> or is_KeyedObjectContainer_v<T>;
-
-} // namespace detail
-
-template<typename T>
-constexpr bool is_sorted_container_v = detail::is_sc_v<T>;
-
-namespace detail {
-template<typename T>
-constexpr bool is_uc_v = is_container_v<T> and not is_sorted_container_v<T>;
-}
-
-template<typename T>
-constexpr bool is_unsorted_container_v = detail::is_uc_v<T>;
-
-namespace detail {
-
-template<typename T, typename K = void>
-using ei_isc_t = std::enable_if_t<is_sorted_container_v<T>, K>;
-
-template<typename T, typename K = void>
-using ei_iuc_t = std::enable_if_t<is_unsorted_container_v<T>, K>;
-
-} // namespace detail
-
-template<typename T, typename K = void>
-using enable_if_is_sorted_container_t = detail::ei_isc_t<T, K>;
-
-template<typename T, typename K = void>
-using enable_if_is_unsorted_container_t = detail::ei_iuc_t<T, K>;
 
 template<typename C>
 enable_if_has_insert_or_assign_t<C>
