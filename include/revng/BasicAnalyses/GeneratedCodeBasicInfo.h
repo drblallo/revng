@@ -364,6 +364,21 @@ public:
 
   llvm::Function *root() const { return RootFunction; }
 
+    llvm::SmallVector<std::pair<llvm::BasicBlock *, bool>, 4>
+  blocksByPCRange(MetaAddress Start, MetaAddress End);
+
+  static MetaAddress getPCFromNewPC(llvm::Instruction *I) {
+    if (llvm::CallInst *NewPCCall = getCallTo(I, "newpc")) {
+      return MetaAddress::fromConstant(NewPCCall->getArgOperand(0));
+    } else {
+      return MetaAddress::invalid();
+    }
+  }
+
+  static MetaAddress getPCFromNewPC(llvm::BasicBlock *BB) {
+    return getPCFromNewPC(&*BB->begin());
+  }
+
 private:
   static std::vector<llvm::GlobalVariable *>
   extractCSVs(llvm::Instruction *Call, unsigned MDKindID) {

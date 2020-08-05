@@ -10,6 +10,7 @@
 #include <set>
 
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 
@@ -137,6 +138,40 @@ GeneratedCodeBasicInfo::getSuccessors(BasicBlock *BB) const {
         Result.Other = true;
       }
     }
+  }
+
+  return Result;
+}
+
+SmallVector<std::pair<BasicBlock *, bool>, 4>
+GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
+  SmallVector<std::pair<BasicBlock *, bool>, 4> Result;
+
+  BasicBlock *StartBB = getBlockAt(Start);
+
+  df_iterator_default_set<BasicBlock *> Visited;
+  for (BasicBlock *BB : depth_first_ext(StartBB, Visited)) {
+    // Detect if this basic block is a boundary
+    enum { Unknown, Yes, No } IsBoundary = Unknown;
+
+    for (BasicBlock *Successor : make_range(succ_begin(BB), succ_end(BB))) {
+      auto SuccessorMA = GeneratedCodeBasicInfo::getPCFromNewPC(Successor);
+      if (not GeneratedCodeBasicInfo::isPartOfRootDispatcher(Successor)
+          and (SuccessorMA.isInvalid()
+               or (SuccessorMA.address() >= Start.address()
+                   and SuccessorMA.address() < End.address()))) {
+        revng_assert(IsBoundary != Yes);
+        IsBoundary = No;
+      } else {
+        revng_assert(IsBoundary != No);
+        IsBoundary = Yes;
+        Visited.insert(Successor);
+      }
+    }
+
+    revng_assert(IsBoundary != Unknown);
+
+    Result.emplace_back(BB, IsBoundary == Yes);
   }
 
   return Result;

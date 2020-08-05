@@ -668,6 +668,8 @@ void EnforceABIImpl::handleRegularFunctionCall(CallInst *Call) {
   //
   auto *Slots = cast<MDTuple>(QMD.extract<MDTuple *>(FuncCall, 0));
   for (const MDOperand &Operand : Slots->operands()) {
+    using namespace StackAnalysis;
+
     auto *SlotTuple = cast<MDTuple>(Operand.get());
 
     auto *CSV = cast<GlobalVariable>(QMD.extract<Constant *>(SlotTuple, 0));

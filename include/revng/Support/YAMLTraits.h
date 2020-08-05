@@ -22,4 +22,36 @@ using ei_hmt = std::enable_if_t<has_MappingTraits<T>::value, K>;
 template<typename T, typename K = void>
 using enable_if_has_MappingTraits = detail::ei_hmt<T, K>;
 
+template<typename T>
+inline llvm::StringRef getNameFromYAMLScalar(T V) {
+  struct GetScalarIO {
+    llvm::StringRef Result;
+    void enumCase(const T &V, llvm::StringRef Name, const T &M) {
+      if (V == M) {
+        Result = Name;
+      }
+    }
+  };
+  GetScalarIO ExtractName;
+  llvm::yaml::ScalarEnumerationTraits<T>::enumeration(ExtractName, V);
+
+  return ExtractName.Result;
+}
+
+template<typename T>
+inline T getValueFromYAMLScalar(llvm::StringRef Name) {
+  struct GetScalarIO {
+    llvm::StringRef TargetName;
+    void enumCase(T &V, llvm::StringRef Name, const T &M) {
+      if (TargetName == Name)
+        V = M;
+    }
+  };
+  T Result;
+  GetScalarIO ExtractValue{ Name, 0 };
+  llvm::yaml::ScalarEnumerationTraits<T>::enumeration(ExtractValue, Result);
+
+  return Result;
+}
+
 #endif // SUPPORT_YAMLTRAITS_H

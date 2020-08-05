@@ -12,6 +12,7 @@
 #include "revng/Support/MetaAddress.h"
 #include "revng/Support/MetaAddress/KeyTraits.h"
 #include "revng/Support/MetaAddress/YAMLTraits.h"
+#include "revng/Support/YAMLTraits.h"
 
 // Forward declarations
 namespace model {
@@ -56,7 +57,8 @@ enum Values {
 namespace llvm::yaml {
 template<>
 struct ScalarEnumerationTraits<model::FunctionEdgeType::Values> {
-  static void enumeration(IO &io, model::FunctionEdgeType::Values &V) {
+  template<typename T>
+  static void enumeration(T &io, model::FunctionEdgeType::Values &V) {
     using namespace model::FunctionEdgeType;
     io.enumCase(V, "Invalid", Invalid);
     io.enumCase(V, "DirectBranch", DirectBranch);
@@ -73,6 +75,18 @@ struct ScalarEnumerationTraits<model::FunctionEdgeType::Values> {
   }
 };
 } // namespace llvm::yaml
+
+namespace model::FunctionEdgeType {
+
+inline llvm::StringRef getName(Values V) {
+  return getNameFromYAMLScalar(V);
+}
+
+inline Values fromName(llvm::StringRef Name) {
+  return getValueFromYAMLScalar<Values>(Name);
+}
+
+} // namespace model::FunctionEdgeType
 
 //
 // FunctionEdge
@@ -136,6 +150,14 @@ public:
 
 public:
   Function(const MetaAddress &Entry) : Entry(Entry) {}
+
+public:
+  /// Get a set of range of addresses representing the body of the function
+  ///
+  /// \note The result of this function is deterministic: the first range
+  ///       represents the entry basic block, all the other are return sorted by
+  ///       address.
+  std::vector<std::pair<MetaAddress, MetaAddress>> basicBlockRanges() const;
 };
 INTROSPECTION_NS(model, Function, Entry, Name, Type, CFG)
 
@@ -156,7 +178,7 @@ struct KeyedObjectTraits<model::Function> {
 //
 class model::Binary {
 public:
-  MutableSet<Function> Functions;
+  MutableSet<model::Function> Functions;
 };
 INTROSPECTION_NS(model, Binary, Functions)
 

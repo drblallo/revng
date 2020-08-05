@@ -9,6 +9,7 @@
 #include "llvm/Pass.h"
 
 #include "revng/BasicAnalyses/GeneratedCodeBasicInfo.h"
+#include "revng/Model/LoadModelPass.h"
 
 class IsolateFunctions : public llvm::ModulePass {
 public:
@@ -21,6 +22,7 @@ public:
 
   void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
     AU.setPreservesAll();
+    AU.addRequired<LoadModelPass>();
     AU.addRequired<GeneratedCodeBasicInfo>();
   }
 };
