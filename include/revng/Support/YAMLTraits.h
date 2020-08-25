@@ -48,7 +48,7 @@ inline T getValueFromYAMLScalar(llvm::StringRef Name) {
     }
   };
   T Result;
-  GetScalarIO ExtractValue{ Name, 0 };
+  GetScalarIO ExtractValue{ Name };
   llvm::yaml::ScalarEnumerationTraits<T>::enumeration(ExtractValue, Result);
 
   return Result;

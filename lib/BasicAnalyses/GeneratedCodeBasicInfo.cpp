@@ -154,18 +154,25 @@ GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
     // Detect if this basic block is a boundary
     enum { Unknown, Yes, No } IsBoundary = Unknown;
 
-    for (BasicBlock *Successor : make_range(succ_begin(BB), succ_end(BB))) {
-      auto SuccessorMA = GeneratedCodeBasicInfo::getPCFromNewPC(Successor);
-      if (not GeneratedCodeBasicInfo::isPartOfRootDispatcher(Successor)
-          and (SuccessorMA.isInvalid()
-               or (SuccessorMA.address() >= Start.address()
-                   and SuccessorMA.address() < End.address()))) {
-        revng_assert(IsBoundary != Yes);
-        IsBoundary = No;
-      } else {
-        revng_assert(IsBoundary != No);
-        IsBoundary = Yes;
-        Visited.insert(Successor);
+    auto SuccBegin = succ_begin(BB);
+    auto SuccEnd = succ_end(BB);
+    if (SuccBegin == SuccEnd) {
+      // This basic blocks ends with an `UnreachableInst`
+      IsBoundary = Yes;
+    } else {
+      for (BasicBlock *Successor : make_range(SuccBegin, SuccEnd)) {
+        auto SuccessorMA = GeneratedCodeBasicInfo::getPCFromNewPC(Successor);
+        if (not GeneratedCodeBasicInfo::isPartOfRootDispatcher(Successor)
+            and (SuccessorMA.isInvalid()
+                 or (SuccessorMA.address() >= Start.address()
+                     and SuccessorMA.address() < End.address()))) {
+          revng_assert(IsBoundary != Yes);
+          IsBoundary = No;
+        } else {
+          revng_assert(IsBoundary != No);
+          IsBoundary = Yes;
+          Visited.insert(Successor);
+        }
       }
     }
 

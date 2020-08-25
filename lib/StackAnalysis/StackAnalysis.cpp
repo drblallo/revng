@@ -174,14 +174,24 @@ commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
 
       // Identify Destination address
       MetaAddress Destination = MetaAddress::invalid();
-      if (BasicBlock *Successor = Block->getSingleSuccessor())
+      BasicBlock *Successor = Block->getSingleSuccessor();
+      if (Successor != nullptr)
         Destination = getBasicBlockPC(Successor);
+
+      llvm::errs() << "From " << Source.toString() << " (" << getName(Block)
+                   << ")"
+                   << " to " << Destination.toString() << " ("
+                   << getName(Successor) << ")"
+                   << " of type " << FunctionEdgeType::getName(EdgeType)
+                   << "\n";
 
       // Record the edge in the CFG
       FunctionEdge NewEdge{ Source, Destination, EdgeType };
       revng_assert(Function.CFG.count(NewEdge) == 0);
       Function.CFG.insert(NewEdge);
     }
+
+    revng_check(Function.verifyCFG());
   }
 }
 

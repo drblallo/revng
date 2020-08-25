@@ -158,6 +158,9 @@ public:
   ///       represents the entry basic block, all the other are return sorted by
   ///       address.
   std::vector<std::pair<MetaAddress, MetaAddress>> basicBlockRanges() const;
+
+public:
+  bool verifyCFG() const debug_function;
 };
 INTROSPECTION_NS(model, Function, Entry, Name, Type, CFG)
 
