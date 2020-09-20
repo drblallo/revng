@@ -48,6 +48,8 @@ public:
 
   static const NodeRef &getEntryNode(const NodeRef &N) { return N; }
 
+  }
+
   // static ChildIteratorType child_begin(NodeRef)
   // static ChildIteratorType child_end  (NodeRef)
   //    Return iterators that point to the beginning and ending of the child
@@ -218,6 +220,9 @@ public:
   //    Return the entry node of the graph
   static NodeRef getEntryNode(const EdgeFilteredGraphImpl &G) {
     return BaseGraphTraits::getEntryNode(G.Graph);
+  }
+  static const NodeRef &getEntryNode(const NodeRef &N) {
+    return N;
   }
   static const NodeRef &getEntryNode(const NodeRef &N) { return N; }
 
