@@ -161,8 +161,14 @@ GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
       IsBoundary = Yes;
     } else {
       for (BasicBlock *Successor : make_range(SuccBegin, SuccEnd)) {
-        auto SuccessorMA = GeneratedCodeBasicInfo::getPCFromNewPC(Successor);
-        if (not GeneratedCodeBasicInfo::isPartOfRootDispatcher(Successor)
+
+        // Ignore unexpectedpc
+        using GCBI = GeneratedCodeBasicInfo;
+        if (GCBI::getType(Successor) == BlockType::UnexpectedPCBlock)
+          continue;
+        
+        auto SuccessorMA = GCBI::getPCFromNewPC(Successor);
+        if (not GCBI::isPartOfRootDispatcher(Successor)
             and (SuccessorMA.isInvalid()
                  or (SuccessorMA.address() >= Start.address()
                      and SuccessorMA.address() < End.address()))) {

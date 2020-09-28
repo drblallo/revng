@@ -5,7 +5,12 @@
 // This file is distributed under the MIT License. See LICENSE.md for details.
 //
 
+// LLVM includes
+#include "llvm/Support/GraphWriter.h"
+#include "llvm/Support/raw_os_ostream.h"
+
 // Local libraries includes
+#include "revng/ADT/GenericGraph.h"
 #include "revng/Model/Binary.h"
 
 using namespace llvm;
@@ -96,7 +101,40 @@ BasicBlockRangesVector Function::basicBlockRanges() const {
 
 namespace model {
 
+struct FunctionCFGNode : public ForwardNode<FunctionCFGNode, Empty, false> {};
+
+struct FunctionCFG : public GenericGraph<FunctionCFGNode> {
+public:
+  FunctionCFGNode *get(MetaAddress MA) {
+    FunctionCFGNode *Result = nullptr;
+    auto It = Map.find(MA);
+    if (It == Map.end()) {
+      Result = addNode();
+      Map[MA] = Result;
+    } else {
+      Result = It->second;
+    }
+
+    return Result;
+  }
+
+private:
+  std::map<MetaAddress, FunctionCFGNode *> Map;
+
+};
+
 bool Function::verifyCFG() const {
+  // Populate graph
+  FunctionCFG Graph;
+  for (const FunctionEdge &Edge : CFG) {
+    auto *Source = Graph.get(Edge.Source);
+    auto *Destination = Graph.get(Edge.Destination);
+    Source->addSuccessor(Destination);
+  }
+
+  llvm::raw_os_ostream Output(dbg);
+  llvm::WriteGraph(Output, &Graph);
+
 #if 0
   // Make sure that the target of each DirectBranch edge is the source of
   // another edge
