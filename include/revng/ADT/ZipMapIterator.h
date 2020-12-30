@@ -156,12 +156,13 @@ keyFromValue(const typename T::value_type &Value) {
   return Value.first;
 }
 
-template<typename Map>
+template<typename LeftMap, typename RightMap>
 struct DefaultComparator {
-  template<typename T>
-  static int compare(const T &LHS, const T &RHS) {
-    auto LHSKey = keyFromValue<Map>(LHS);
-    auto RHSKey = keyFromValue<Map>(RHS);
+  template<typename T, typename Q>
+  static int compare(const T &LHS, const Q &RHS) {
+    auto LHSKey = keyFromValue<LeftMap>(LHS);
+    auto RHSKey = keyFromValue<RightMap>(RHS);
+    static_assert(std::is_same_v<decltype(LHSKey), decltype(RHSKey)>);
     auto Less = std::less<decltype(LHSKey)>();
     if (Less(LHSKey, RHSKey))
       return -1;
@@ -172,33 +173,44 @@ struct DefaultComparator {
   }
 };
 
-template<typename Map, typename Comparator = DefaultComparator<Map>>
-using zipmap_pair = std::pair<element_pointer_t<Map>, element_pointer_t<Map>>;
+template<typename LeftMap,
+         typename RightMap>
+using zipmap_pair = std::pair<element_pointer_t<LeftMap>,
+                              element_pointer_t<RightMap>>;
 
-template<typename Map, typename Comparator = DefaultComparator<Map>>
+template<typename LeftMap,
+         typename RightMap,
+         typename Comparator = DefaultComparator<LeftMap, RightMap>>
 class ZipMapIterator
-  : public llvm::iterator_facade_base<ZipMapIterator<Map, Comparator>,
+  : public llvm::iterator_facade_base<ZipMapIterator<LeftMap,
+                                                     RightMap,
+                                                     Comparator>,
                                       std::forward_iterator_tag,
-                                      const zipmap_pair<Map, Comparator>> {
+                                      const zipmap_pair<LeftMap,
+                                                        RightMap>> {
 public:
   template<bool C, typename A, typename B>
   using conditional_t = typename std::conditional<C, A, B>::type;
-  using inner_iterator = conditional_t<std::is_const<Map>::value,
-                                       typename Map::const_iterator,
-                                       typename Map::iterator>;
-  using inner_range = llvm::iterator_range<inner_iterator>;
-  using value_type = zipmap_pair<Map, Comparator>;
+  using left_inner_iterator = conditional_t<std::is_const_v<LeftMap>,
+                                            typename LeftMap::const_iterator,
+                                            typename LeftMap::iterator>;
+  using right_inner_iterator = conditional_t<std::is_const_v<RightMap>,
+                                            typename RightMap::const_iterator,
+                                            typename RightMap::iterator>;
+  using left_inner_range = llvm::iterator_range<left_inner_iterator>;
+  using right_inner_range = llvm::iterator_range<right_inner_iterator>;
+  using value_type = zipmap_pair<LeftMap, RightMap>;
   using reference = typename ZipMapIterator::reference;
 
 private:
   value_type Current;
-  inner_iterator LeftIt;
-  const inner_iterator EndLeftIt;
-  inner_iterator RightIt;
-  const inner_iterator EndRightIt;
+  left_inner_iterator LeftIt;
+  const left_inner_iterator EndLeftIt;
+  right_inner_iterator RightIt;
+  const right_inner_iterator EndRightIt;
 
 public:
-  ZipMapIterator(inner_range LeftRange, inner_range RightRange) :
+  ZipMapIterator(left_inner_range LeftRange, right_inner_range RightRange) :
     LeftIt(LeftRange.begin()),
     EndLeftIt(LeftRange.end()),
     RightIt(RightRange.begin()),
@@ -207,7 +219,7 @@ public:
     next();
   }
 
-  ZipMapIterator(inner_iterator LeftIt, inner_iterator RightIt) :
+  ZipMapIterator(left_inner_iterator LeftIt, right_inner_iterator RightIt) :
     ZipMapIterator(llvm::make_range(LeftIt, LeftIt),
                    llvm::make_range(RightIt, RightIt)) {}
 
@@ -264,24 +276,32 @@ private:
   }
 };
 
-template<typename T, typename Comparator = DefaultComparator<T>>
-inline ZipMapIterator<T, Comparator> zipmap_begin(T &Left, T &Right) {
-  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.begin(),
-                                                        Left.end()),
-                                       llvm::make_range(Right.begin(),
-                                                        Right.end()));
+template<typename LeftMap,
+         typename RightMap,
+         typename Comparator = DefaultComparator<LeftMap, RightMap>>
+inline ZipMapIterator<LeftMap, RightMap, Comparator>
+zipmap_begin(LeftMap &Left, RightMap &Right) {
+  return ZipMapIterator<LeftMap, RightMap, Comparator>(llvm::make_range(Left.begin(),
+                                                                        Left.end()),
+                                                       llvm::make_range(Right.begin(),
+                                                                        Right.end()));
 }
 
-template<typename T, typename Comparator = DefaultComparator<T>>
-inline ZipMapIterator<T, Comparator> zipmap_end(T &Left, T &Right) {
-  return ZipMapIterator<T, Comparator>(llvm::make_range(Left.end(), Left.end()),
-                                       llvm::make_range(Right.end(),
-                                                        Right.end()));
+template<typename LeftMap,
+         typename RightMap,
+         typename Comparator = DefaultComparator<LeftMap, RightMap>>
+inline ZipMapIterator<LeftMap, RightMap, Comparator>
+zipmap_end(LeftMap &Left, RightMap &Right) {
+  return ZipMapIterator<LeftMap, RightMap, Comparator>(llvm::make_range(Left.end(), Left.end()),
+                                                       llvm::make_range(Right.end(),
+                                                                        Right.end()));
 }
 
-template<typename T, typename Comparator = DefaultComparator<T>>
-inline llvm::iterator_range<ZipMapIterator<T, Comparator>>
-zipmap_range(T &Left, T &Right) {
-  return llvm::make_range(zipmap_begin<T, Comparator>(Left, Right),
-                          zipmap_end<T, Comparator>(Left, Right));
+template<typename LeftMap,
+         typename RightMap,
+         typename Comparator = DefaultComparator<LeftMap, RightMap>>
+inline llvm::iterator_range<ZipMapIterator<LeftMap, RightMap, Comparator>>
+zipmap_range(LeftMap &Left, RightMap &Right) {
+  return llvm::make_range(zipmap_begin<LeftMap, RightMap, Comparator>(Left, Right),
+                          zipmap_end<LeftMap, RightMap, Comparator>(Left, Right));
 }
