@@ -290,7 +290,7 @@ public:
 
 public:
   template<class... Args>
-  NodeT *addNode(Args &&... A) {
+  NodeT *addNode(Args &&...A) {
     Nodes.push_back(std::make_unique<NodeT>(std::forward<Args>(A)...));
     if constexpr (NodeT::has_parent)
       Nodes.back()->setParent(this);

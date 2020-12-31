@@ -135,7 +135,7 @@ static cl::opt<string> DebugPath("debug-path",
 static Logger<> PTCLog("ptc");
 
 template<typename T, typename... Args>
-inline std::array<T, sizeof...(Args)> make_array(Args &&... args) {
+inline std::array<T, sizeof...(Args)> make_array(Args &&...args) {
   return { { std::forward<Args>(args)... } };
 }
 

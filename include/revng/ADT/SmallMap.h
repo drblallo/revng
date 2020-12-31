@@ -411,4 +411,3 @@ private:
     return smallBegin() + Size;
   }
 };
-

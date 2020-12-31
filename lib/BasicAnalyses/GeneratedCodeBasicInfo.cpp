@@ -10,7 +10,6 @@
 #include <set>
 
 #include "llvm/ADT/DepthFirstIterator.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 
@@ -166,7 +165,7 @@ GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
         using GCBI = GeneratedCodeBasicInfo;
         if (GCBI::getType(Successor) == BlockType::UnexpectedPCBlock)
           continue;
-        
+
         auto SuccessorMA = GCBI::getPCFromNewPC(Successor);
         if (not GCBI::isPartOfRootDispatcher(Successor)
             and (SuccessorMA.isInvalid()

@@ -120,7 +120,6 @@ public:
 
 private:
   std::map<MetaAddress, FunctionCFGNode *> Map;
-
 };
 
 bool Function::verifyCFG() const {

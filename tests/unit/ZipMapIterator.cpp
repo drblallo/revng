@@ -109,7 +109,8 @@ compare(LeftType &Left,
   };
 
   auto FindRight = [&Expected, &Right](unsigned I) {
-    return Expected[I].second ? RightKE::find(Right, *Expected[I].second) : nullptr;
+    return Expected[I].second ? RightKE::find(Right, *Expected[I].second) :
+                                nullptr;
   };
 
   for (unsigned I = 0; I < Result.size(); I++) {

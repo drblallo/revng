@@ -48,30 +48,32 @@ public:
 
   static const NodeRef &getEntryNode(const NodeRef &N) { return N; }
 
-  }
+}
 
-  // static ChildIteratorType child_begin(NodeRef)
-  // static ChildIteratorType child_end  (NodeRef)
-  //    Return iterators that point to the beginning and ending of the child
-  //    node list for the specified node.
-  static auto child_begin(NodeRef N) {
-    auto Childs = llvm::make_range(BaseGraphTraits::child_begin(N),
-                                   BaseGraphTraits::child_end(N));
-    const auto P = std::bind(PredicateType::value, N, std::placeholders::_1);
-    return llvm::make_filter_range(Childs, std::move(P)).begin();
-  }
-  static auto child_end(NodeRef N) {
-    auto Childs = llvm::make_range(BaseGraphTraits::child_begin(N),
-                                   BaseGraphTraits::child_end(N));
-    const auto P = std::bind(PredicateType::value, N, std::placeholders::_1);
-    return llvm::make_filter_range(Childs, std::move(P)).end();
-  }
+// static ChildIteratorType child_begin(NodeRef)
+// static ChildIteratorType child_end  (NodeRef)
+//    Return iterators that point to the beginning and ending of the child
+//    node list for the specified node.
+static auto
+child_begin(NodeRef N) {
+  auto Childs = llvm::make_range(BaseGraphTraits::child_begin(N),
+                                 BaseGraphTraits::child_end(N));
+  const auto P = std::bind(PredicateType::value, N, std::placeholders::_1);
+  return llvm::make_filter_range(Childs, std::move(P)).begin();
+}
+static auto child_end(NodeRef N) {
+  auto Childs = llvm::make_range(BaseGraphTraits::child_begin(N),
+                                 BaseGraphTraits::child_end(N));
+  const auto P = std::bind(PredicateType::value, N, std::placeholders::_1);
+  return llvm::make_filter_range(Childs, std::move(P)).end();
+}
 
-  static_assert(std::is_same_v<decltype(child_begin(std::declval<NodeRef>())),
-                               decltype(child_end(std::declval<NodeRef>()))>);
+static_assert(std::is_same_v<decltype(child_begin(std::declval<NodeRef>())),
+                             decltype(child_end(std::declval<NodeRef>()))>);
 
-  using ChildIteratorType = decltype(child_begin(std::declval<NodeRef>()));
-};
+using ChildIteratorType = decltype(child_begin(std::declval<NodeRef>()));
+}
+;
 
 template<typename GraphType, typename PredicateType>
 struct llvm::Inverse<NodePairFilteredGraphImpl<GraphType, PredicateType>> {
@@ -221,9 +223,7 @@ public:
   static NodeRef getEntryNode(const EdgeFilteredGraphImpl &G) {
     return BaseGraphTraits::getEntryNode(G.Graph);
   }
-  static const NodeRef &getEntryNode(const NodeRef &N) {
-    return N;
-  }
+  static const NodeRef &getEntryNode(const NodeRef &N) { return N; }
   static const NodeRef &getEntryNode(const NodeRef &N) { return N; }
 
   using ChildIteratorType = llvm::mapped_iterator<ChildEdgeIteratorType,
