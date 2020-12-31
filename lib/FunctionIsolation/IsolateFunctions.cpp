@@ -948,7 +948,7 @@ void IFI::run() {
         // callee, that for sure will not be in the current function and
         // consequently in the RootToIsolated.
         if ((GCBI.isTranslated(Successor)
-             or SuccessorType == BT::IndirectBranchDispatcherHelperBlock)
+             or SuccessorType == BlockType::IndirectBranchDispatcherHelperBlock)
             and SuccessorIt != RootToIsolated.end()) {
           Successors.push_back(cast<BasicBlock>(SuccessorIt->second));
         }
