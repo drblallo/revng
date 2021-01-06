@@ -294,6 +294,10 @@ static llvm::Value *getModifyAndReassign(Instruction *I) {
 Interrupt Analysis::transfer(BasicBlock *BB) {
   auto SP0 = ASID::stackID();
 
+  BlockType::Values Type = GCBI->getType(BB);
+  revng_assert(Type != BlockType::AnyPCBlock
+               and Type != BlockType::UnexpectedPCBlock);
+
   // Create a copy of the initial state associated to this basic block
   auto It = State.find(BB);
   revng_assert(It != State.end());
@@ -510,10 +514,28 @@ Interrupt Analysis::transfer(BasicBlock *BB) {
   revng_abort();
 }
 
+static SmallVector<BasicBlock *, 2>
+directSuccessors(GeneratedCodeBasicInfo *GCBI, Instruction *T) {
+  revng_assert(T->isTerminator());
+  SmallVector<BasicBlock *, 2> Successors;
+  for (BasicBlock *Successor : llvm::successors(T)) {
+    BlockType::Values SuccessorType = GCBI->getType(Successor);
+    if (SuccessorType != BlockType::UnexpectedPCBlock
+        and SuccessorType != BlockType::AnyPCBlock)
+      Successors.push_back(Successor);
+  }
+  return Successors;
+}
+
 Interrupt Analysis::handleTerminator(Instruction *T,
                                      Element &Result,
                                      ABIIRBasicBlock &ABIBB) {
   namespace BT = BranchType;
+  BasicBlock *BB = T->getParent();
+  FakeReturns.erase(BB);
+
+  if (llvm::isa<llvm::SwitchInst>(T))
+    dbg << "here\n";
 
   revng_assert(T->isTerminator());
   revng_assert(not isa<UnreachableInst>(T));
@@ -569,7 +591,9 @@ Interrupt Analysis::handleTerminator(Instruction *T,
     // local
     namespace BT = BlockType;
     IsInstructionLocal = (IsInstructionLocal
-                          or SuccessorType == BT::TranslatedBlock);
+                          or SuccessorType == BT::TranslatedBlock
+                          or SuccessorType
+                               == BT::IndirectBranchDispatcherHelperBlock);
 
     IsIndirect = (IsIndirect or SuccessorType == BT::AnyPCBlock
                   or SuccessorType == BT::UnexpectedPCBlock
@@ -589,13 +613,10 @@ Interrupt Analysis::handleTerminator(Instruction *T,
 
   if (IsInstructionLocal) {
     SaTerminator << " IsInstructionLocal";
-    SmallVector<BasicBlock *, 2> Successors;
-    for (BasicBlock *Successor : llvm::successors(T))
-      Successors.push_back(Successor);
 
     return AI::createWithSuccessors(std::move(Result),
                                     BT::InstructionLocalCFG,
-                                    Successors);
+                                    directSuccessors(GCBI, T));
   }
 
   // 3. Check if this a function call (although the callee might not be a proper
@@ -709,6 +730,7 @@ Interrupt Analysis::handleTerminator(Instruction *T,
     if (IsReturnFromFake) {
       // Continue from there
       MetaAddress MA = GCBI->fromPC(FakeFunctionReturnAddress);
+      FakeReturns.insert({ BB, MA });
       BasicBlock *ReturnBB = GCBI->getBlockAt(MA);
       return AI::createWithSuccessor(std::move(Result),
                                      BT::FakeFunctionReturn,
@@ -734,20 +756,10 @@ Interrupt Analysis::handleTerminator(Instruction *T,
     }
   }
 
-  // The branch is direct and has nothing else special, consider it
-  // function-local
-  SmallVector<BasicBlock *, 2> Successors;
-  for (BasicBlock *Successor : llvm::successors(T)) {
-    BlockType::Values SuccessorType = GCBI->getType(Successor);
-    if (SuccessorType != BlockType::UnexpectedPCBlock
-        and SuccessorType != BlockType::AnyPCBlock)
-      Successors.push_back(Successor);
-  }
-
   SaTerminator << " FunctionLocalCFG";
   return AI::createWithSuccessors(std::move(Result),
                                   BT::FunctionLocalCFG,
-                                  Successors);
+                                  directSuccessors(GCBI, T));
 }
 
 std::pair<FunctionType::Values, Element> Analysis::finalize() {
@@ -1061,12 +1073,14 @@ IFS Analysis::createSummary() {
                                  std::move(ABI),
                                  std::move(FrameSizeAtCallSite),
                                  std::move(BranchesType),
-                                 std::move(WrittenRegisters));
+                                 std::move(WrittenRegisters),
+                                 std::move(FakeReturns));
   } else {
     Summary = IFS::createNoReturn(std::move(ABI),
                                   std::move(FrameSizeAtCallSite),
                                   std::move(BranchesType),
-                                  std::move(WrittenRegisters));
+                                  std::move(WrittenRegisters),
+                                  std::move(FakeReturns));
   }
   findIncoherentFunctions(Summary);
 

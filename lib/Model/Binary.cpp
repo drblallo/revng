@@ -6,6 +6,8 @@
 //
 
 // LLVM includes
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_os_ostream.h"
 
@@ -21,6 +23,7 @@ using CFGVector = decltype(model::Function::CFG);
 
 namespace model {
 
+#if 0
 static void processEdge(BasicBlockRangesMap &Ranges,
                         const CFGVector &CFG,
                         const FunctionEdge &Edge) {
@@ -61,8 +64,17 @@ static void processEdge(BasicBlockRangesMap &Ranges,
   // Record the basic block
   Ranges[Edge.Destination] = BlockEnd;
 }
+#endif
 
 BasicBlockRangesVector Function::basicBlockRanges() const {
+
+  BasicBlockRangesVector Result;
+  for (const model::BasicBlock &BB : CFG) {
+    Result.emplace_back(BB.Start, BB.End);
+  }
+  return Result;
+
+#if 0
   BasicBlockRangesMap Ranges;
 
   //
@@ -95,21 +107,32 @@ BasicBlockRangesVector Function::basicBlockRanges() const {
     Result.emplace_back(Start, End);
 
   return Result;
+#endif
 }
 
 } // namespace model
 
 namespace model {
 
-struct FunctionCFGNode : public ForwardNode<FunctionCFGNode, Empty, false> {};
+struct FunctionCFGNode : public ForwardNode<FunctionCFGNode, Empty, false> {
+  FunctionCFGNode(MetaAddress Start) : Start(Start) {}
+  MetaAddress Start;
+};
 
 struct FunctionCFG : public GenericGraph<FunctionCFGNode> {
+public:
+  FunctionCFG(MetaAddress Entry) : Entry(Entry) {}
+
+public:
+  MetaAddress entry() const { return Entry; }
+  FunctionCFGNode *entryNode() const { return Map.at(Entry); }
+
 public:
   FunctionCFGNode *get(MetaAddress MA) {
     FunctionCFGNode *Result = nullptr;
     auto It = Map.find(MA);
     if (It == Map.end()) {
-      Result = addNode();
+      Result = addNode(MA);
       Map[MA] = Result;
     } else {
       Result = It->second;
@@ -118,49 +141,146 @@ public:
     return Result;
   }
 
+  bool allNodesAreReachable() const {
+    if (Map.size() == 0)
+      return true;
+
+    // Ensure all the nodes are reachable from the entry node
+    df_iterator_default_set<FunctionCFGNode *> Visited;
+    for (auto &Ignore : depth_first_ext(entryNode(), Visited))
+      ;
+    return Visited.size() == size();
+  }
+
+  bool hasOnlyInvalidExits() const {
+    for (auto &[Address, Node] : Map)
+      if (Address.isValid() and not Node->hasSuccessors())
+        return false;
+    return true;
+  }
+
 private:
+  MetaAddress Entry;
   std::map<MetaAddress, FunctionCFGNode *> Map;
 };
 
 bool Function::verifyCFG() const {
-  // Populate graph
-  FunctionCFG Graph;
-  for (const FunctionEdge &Edge : CFG) {
-    auto *Source = Graph.get(Edge.Source);
-    auto *Destination = Graph.get(Edge.Destination);
-    Source->addSuccessor(Destination);
-  }
+  using namespace FunctionEdgeType;
 
-  llvm::raw_os_ostream Output(dbg);
-  llvm::WriteGraph(Output, &Graph);
+  yaml::Output YAMLOutput(llvm::errs());
+  YAMLOutput << *const_cast<Function *>(this);
 
 #if 0
-  // Make sure that the target of each DirectBranch edge is the source of
-  // another edge
+  std::map<MetaAddress, MetaAddress> EndToStart;
   {
-    std::set<MetaAddress> Sources;
-    std::set<MetaAddress> Destinations;
+    std::set<MetaAddress> BlockAddresses { Entry };
     for (const FunctionEdge &Edge : CFG) {
-      Sources.insert(Edge.Source);
-      Destinations.insert(Edge.Destination);
+
+      switch (Edge.Type) {
+      case DirectBranch:
+      case FakeFunctionCall:
+      case FakeFunctionReturn:
+      case Return:
+      case BrokenReturn:
+      case IndirectTailCall:
+      case LongJmp:
+      case Unreachable:
+        if (Edge.Destination.isValid())
+          BlockAddresses.insert(Edge.Destination);
+        break;
+
+      case FunctionCall:
+      case IndirectCall:
+        revng_assert(Edge.Source.isValid());
+        BlockAddresses.insert(Edge.Source);
+        break;
+
+      case Killer:
+        break;
+
+      case Invalid:
+        revng_abort();
+        break;
+      }
+
     }
 
     for (const FunctionEdge &Edge : CFG) {
-      if (Edge.Type == FunctionEdgeType::DirectBranch) {
-        if (Sources.count(Edge.Destination) == 0) {
-          llvm::errs() << "Function " << Name << " (" << Entry.toString() << ")"
-                       << " has a DirectBranch jumping from "
-                       << Edge.Source.toString()
-                       << " to " << Edge.Destination.toString()
-                       << " but no other edge leaves from there\n";
-          return false;
-        } else if (Edge.Source Destinations.count(Edge.Source)) {
-        }
-      }
+      // Find the closest BlockAddress
+      auto It = BlockAddresses.lower_bound(Edge.Source);
+      revng_assert(It != BlockAddresses.begin());
+      --It;
+      EndToStart[Edge.Source] = *It;
     }
   }
 #endif
+
+  // Populate graph
+  FunctionCFG Graph(Entry);
+  for (const BasicBlock &Block : CFG) {
+    auto *Source = Graph.get(Block.Start);
+
+    for (const FunctionEdge &Edge : Block.Successors) {
+      switch (Edge.Type) {
+      case DirectBranch:
+      case FakeFunctionCall:
+      case FakeFunctionReturn:
+      case Return:
+      case BrokenReturn:
+      case IndirectTailCall:
+      case LongJmp:
+      case Unreachable:
+        Source->addSuccessor(Graph.get(Edge.Destination));
+        break;
+
+      case FunctionCall:
+      case IndirectCall:
+        Source->addSuccessor(Graph.get(Block.End));
+        break;
+
+      case Killer:
+        Source->addSuccessor(Graph.get(MetaAddress::invalid()));
+        break;
+
+      case Invalid:
+        revng_abort();
+        break;
+      }
+    }
+  }
+
+  {
+    raw_os_ostream Output(dbg);
+    WriteGraph(Output, &Graph);
+  }
+
+  // Ensure all the nodes are reachable from the entry node
+  revng_assert(Graph.allNodesAreReachable());
+
+  // Ensure the only node with no successors is invalid
+  revng_assert(Graph.hasOnlyInvalidExits());
+
   return true;
 }
 
 } // namespace model
+
+template<>
+struct llvm::DOTGraphTraits<model::FunctionCFG *>
+  : public DefaultDOTGraphTraits {
+  DOTGraphTraits(bool simple = false) : DefaultDOTGraphTraits(simple) {}
+
+  static std::string
+  getNodeLabel(const model::FunctionCFGNode *Node, const model::FunctionCFG *) {
+    return Node->Start.toString();
+  }
+
+  static std::string getNodeAttributes(const model::FunctionCFGNode *Node,
+                                       const model::FunctionCFG *Graph) {
+    if (Node->Start == Graph->entry()) {
+      return "shape=box,peripheries=2";
+    }
+
+    return "";
+  }
+};

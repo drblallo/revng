@@ -11,6 +11,7 @@
 #include <set>
 
 #include "revng/Support/Debug.h"
+#include "revng/Support/MetaAddress.h"
 
 namespace llvm {
 class BasicBlock;
@@ -716,6 +717,7 @@ public:
     std::map<llvm::GlobalVariable *, FunctionRegisterDescription> RegisterSlots;
     std::deque<CallSiteDescription> CallSites;
     std::set<llvm::GlobalVariable *> ClobberedRegisters;
+    std::multimap<llvm::BasicBlock *, MetaAddress> FakeReturns;
   };
 
 public:

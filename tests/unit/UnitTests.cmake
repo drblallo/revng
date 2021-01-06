@@ -37,7 +37,6 @@ target_include_directories(test_stackanalysis
           "${CMAKE_SOURCE_DIR}/lib/StackAnalysis"
           "${CMAKE_BINARY_DIR}/lib/StackAnalysis")
 target_link_libraries(test_stackanalysis
-  revngModel
   revngStackAnalysis
   revngSupport
   revngUnitTestHelpers

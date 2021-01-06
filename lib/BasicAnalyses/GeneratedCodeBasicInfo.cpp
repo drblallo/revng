@@ -113,9 +113,9 @@ bool GeneratedCodeBasicInfo::runOnModule(Module &M) {
   return false;
 }
 
-GeneratedCodeBasicInfo::Successors
+GeneratedCodeBasicInfo::SuccessorsList
 GeneratedCodeBasicInfo::getSuccessors(BasicBlock *BB) const {
-  Successors Result;
+  SuccessorsList Result;
 
   df_iterator_default_set<BasicBlock *> Visited;
   Visited.insert(AnyPC);
@@ -134,7 +134,7 @@ GeneratedCodeBasicInfo::getSuccessors(BasicBlock *BB) const {
       } else if (getType(Successor) == IBDHB) {
         // Ignore
       } else {
-        Result.Other = true;
+        return SuccessorsList::other();
       }
     }
   }

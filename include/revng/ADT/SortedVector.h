@@ -29,7 +29,8 @@ unique_last(ForwardIt First, ForwardIt Last, BinaryPredicate Predicate) {
 template<typename T>
 class SortedVector {
 public:
-  using key_type = const decltype(KeyedObjectTraits<T>::key(std::declval<T>()));
+  using KOT = KeyedObjectTraits<T>;
+  using key_type = const decltype(KOT::key(std::declval<T>()));
 
 private:
   using vector_type = std::vector<T>;
@@ -89,12 +90,12 @@ public:
 
   T &operator[](const key_type &Key) {
     revng_assert(not BatchInsertInProgress);
-    return *insert({ Key }).first;
+    return *insert(KOT::fromKey(Key)).first;
   }
 
   T &operator[](key_type &&Key) {
     revng_assert(not BatchInsertInProgress);
-    return *insert({ Key }).first;
+    return *insert(KOT::fromKey(Key)).first;
   }
 
   iterator begin() {
@@ -268,7 +269,7 @@ public:
 
   iterator lower_bound(const key_type &Key) {
     revng_assert(not BatchInsertInProgress);
-    return std::lower_bound(begin(), end(), value_type{ Key }, compareElements);
+    return std::lower_bound(begin(), end(), KOT::fromKey(Key), compareElements);
   }
 
   const_iterator lower_bound(const key_type &Key) const {

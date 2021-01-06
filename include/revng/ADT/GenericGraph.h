@@ -151,6 +151,8 @@ public:
     return llvm::make_range(Successors.begin(), Successors.end());
   }
 
+  bool hasSuccessors() const { return Successors.size() != 0; }
+
 protected:
   template<typename T>
   static llvm::iterator_range<child_iterator> toNeighborRange(T &Neighbors) {
@@ -231,6 +233,8 @@ public:
   llvm::iterator_range<edge_iterator> predecessor_edges() {
     return llvm::make_range(Predecessors.begin(), Predecessors.end());
   }
+
+  bool hasPredecessors() const { return Predecessors.size() != 0; }
 
 private:
   NeighborContainer Predecessors;

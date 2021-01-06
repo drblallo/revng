@@ -19,7 +19,12 @@ namespace model {
 class Function;
 class Binary;
 class FunctionEdge;
+class BasicBlock;
 } // namespace model
+
+template<>
+struct KeyedObjectTraits<MetaAddress>
+  : public IdentityKeyedObjectTraits<MetaAddress> {};
 
 //
 // FunctionEdgeType
@@ -93,17 +98,16 @@ inline Values fromName(llvm::StringRef Name) {
 //
 class model::FunctionEdge {
 public:
-  MetaAddress Source;
   MetaAddress Destination;
   FunctionEdgeType::Values Type;
 
   bool operator<(const FunctionEdge &Other) const {
-    auto ThisTie = std::tie(Source, Destination, Type);
-    auto OtherTie = std::tie(Other.Source, Other.Destination, Other.Type);
+    auto ThisTie = std::tie(Destination, Type);
+    auto OtherTie = std::tie(Other.Destination, Other.Type);
     return ThisTie < OtherTie;
   }
 };
-INTROSPECTION_NS(model, FunctionEdge, Source, Destination, Type);
+INTROSPECTION_NS(model, FunctionEdge, Destination, Type);
 
 template<>
 struct llvm::yaml::MappingTraits<model::FunctionEdge>
@@ -138,6 +142,33 @@ struct ScalarEnumerationTraits<model::FunctionType::Values> {
 };
 } // namespace llvm::yaml
 
+class model::BasicBlock {
+public:
+  MetaAddress Start;
+  MetaAddress End;
+  SortedVector<FunctionEdge> Successors;
+
+public:
+  BasicBlock(const MetaAddress &Start, const MetaAddress &End) :
+    Start(Start), End(End) {}
+};
+INTROSPECTION_NS(model, BasicBlock, Start, End, Successors);
+
+template<>
+struct llvm::yaml::MappingTraits<model::BasicBlock>
+  : public TupleLikeMappingTraits<model::BasicBlock> {};
+
+template<>
+struct KeyedObjectTraits<model::BasicBlock> {
+  static std::pair<MetaAddress, MetaAddress> key(const model::BasicBlock &Obj) {
+    return { Obj.Start, Obj.End };
+  }
+
+  static model::BasicBlock fromKey(std::pair<MetaAddress, MetaAddress> Obj) {
+    return model::BasicBlock(Obj.first, Obj.second);
+  }
+};
+
 //
 // Function
 //
@@ -146,7 +177,7 @@ public:
   MetaAddress Entry;
   std::string Name;
   FunctionType::Values Type;
-  SortedVector<FunctionEdge> CFG;
+  SortedVector<model::BasicBlock> CFG;
 
 public:
   Function(const MetaAddress &Entry) : Entry(Entry) {}
@@ -161,6 +192,7 @@ public:
 
 public:
   bool verifyCFG() const debug_function;
+  void dump() const debug_function;
 };
 INTROSPECTION_NS(model, Function, Entry, Name, Type, CFG)
 
@@ -175,6 +207,8 @@ struct KeyedObjectTraits<model::Function> {
     return model::Function(Key);
   };
 };
+
+static_assert(is_KeyedObjectContainer_v<MutableSet<model::Function>>);
 
 //
 // Binary

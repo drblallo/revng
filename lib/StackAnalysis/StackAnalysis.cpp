@@ -12,9 +12,12 @@
 #include <sstream>
 #include <vector>
 
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
 
+#include "revng/BasicAnalyses/GeneratedCodeBasicInfo.h"
 #include "revng/Model/Binary.h"
 #include "revng/StackAnalysis/StackAnalysis.h"
 #include "revng/Support/CommandLine.h"
@@ -80,13 +83,90 @@ static opt<std::string> ABIAnalysisOutputPath("abi-analysis-output",
                                               value_desc("path"),
                                               cat(MainCategory));
 
-static void
-commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
+class BasicBlockVisitHelper
+  : public llvm::df_iterator_default_set<BasicBlock *> {
+public:
+  using Base = df_iterator_default_set<BasicBlock *>;
+  using Inserter = typename SortedVector<model::BasicBlock>::BatchInserter;
+
+private:
+  std::stack<model::BasicBlock> BasicBlocksStack;
+  Inserter &I;
+  const std::map<llvm::BasicBlock *, BranchType::Values> &Allowed;
+
+public:
+  BasicBlockVisitHelper(
+    Inserter &I,
+    const std::map<llvm::BasicBlock *, BranchType::Values> &Allowed) :
+    I(I), Allowed(Allowed) {}
+
+public:
+  std::pair<iterator, bool> insert(BasicBlock *BB) {
+    if (Allowed.count(BB) == 0)
+      return { begin(), false };
+
+    auto Result = Base::insert(BB);
+    if (Result.second and GeneratedCodeBasicInfo::isJumpTarget(BB)) {
+      auto MA = getBasicBlockPC(BB);
+      dbg << "Entering ";
+      MA.dump(dbg);
+      dbg << "\n";
+      BasicBlocksStack.emplace(MA, MetaAddress::invalid());
+    }
+    return Result;
+  }
+
+  void completed(BasicBlock *BB) {
+    if (GeneratedCodeBasicInfo::isJumpTarget(BB)) {
+      auto MA = getBasicBlockPC(BB);
+      dbg << "Leaving ";
+      MA.dump(dbg);
+      dbg << "\n";
+      revng_assert(BasicBlocksStack.top().Start == MA);
+      I.insert(BasicBlocksStack.top());
+      BasicBlocksStack.pop();
+    }
+    Base::completed(BB);
+  }
+
+public:
+  model::BasicBlock &currentBlock() { return BasicBlocksStack.top(); }
+};
+
+static void commitToModel(GeneratedCodeBasicInfo &GCBI,
+                          Function *F,
+                          const FunctionsSummary &Summary,
+                          model::Binary &TheBinary) {
   using namespace model;
+
+  std::map<llvm::BasicBlock *, MetaAddress> GeneratingJumpTarget;
+  {
+    llvm::DominatorTree DT(*F);
+    for (llvm::BasicBlock &BB : *F) {
+      if (not GeneratedCodeBasicInfo::isTranslated(&BB)
+          and GCBI.getType(&BB)
+                != BlockType::IndirectBranchDispatcherHelperBlock)
+        continue;
+
+      auto *DTNode = DT.getNode(&BB);
+      revng_assert(DTNode != nullptr);
+
+      while (not GeneratedCodeBasicInfo::isJumpTarget(DTNode->getBlock())) {
+        DTNode = DTNode->getIDom();
+        revng_assert(DTNode != nullptr);
+      }
+
+      GeneratingJumpTarget[&BB] = getBasicBlockPC(DTNode->getBlock());
+    }
+  }
 
   for (const auto &[Entry, FunctionSummary] : Summary.Functions) {
     if (Entry == nullptr)
       continue;
+
+    //
+    // Initialize model::Function
+    //
 
     // Get the entry point address
     MetaAddress EntryPC = getBasicBlockPC(Entry);
@@ -102,6 +182,123 @@ commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
     using FT = model::FunctionType::Values;
     Function.Type = static_cast<FT>(FunctionSummary.Type);
 
+    // auto Inserter = Function.CFG.batch_insert();
+    // BasicBlockVisitHelper VisitHelper(Inserter, FunctionSummary.BasicBlocks);
+    for (auto &[BB, Branch] : FunctionSummary.BasicBlocks) {
+      // Remap BranchType to FunctionEdgeType
+      namespace FET = FunctionEdgeType;
+      FET::Values EdgeType = FET::Invalid;
+
+      switch (Branch) {
+      case BranchType::Invalid:
+      case BranchType::FakeFunction:
+      case BranchType::RegularFunction:
+      case BranchType::NoReturnFunction:
+      case BranchType::UnhandledCall:
+        revng_abort();
+        break;
+
+      case BranchType::InstructionLocalCFG:
+        EdgeType = FET::Invalid;
+        break;
+
+      case BranchType::FunctionLocalCFG:
+        EdgeType = FET::DirectBranch;
+        break;
+
+      case BranchType::FakeFunctionCall:
+        EdgeType = FET::FakeFunctionCall;
+        break;
+
+      case BranchType::FakeFunctionReturn:
+        EdgeType = FET::FakeFunctionReturn;
+        break;
+
+      case BranchType::HandledCall:
+        EdgeType = FET::FunctionCall;
+        break;
+
+      case BranchType::IndirectCall:
+        EdgeType = FET::IndirectCall;
+        break;
+
+      case BranchType::Return:
+        EdgeType = FET::Return;
+        break;
+
+      case BranchType::BrokenReturn:
+        EdgeType = FET::BrokenReturn;
+        break;
+
+      case BranchType::IndirectTailCall:
+        EdgeType = FET::IndirectTailCall;
+        break;
+
+      case BranchType::LongJmp:
+        EdgeType = FET::LongJmp;
+        break;
+
+      case BranchType::Killer:
+        EdgeType = FET::Killer;
+        break;
+
+      case BranchType::Unreachable:
+        EdgeType = FET::Unreachable;
+        break;
+      }
+
+      if (EdgeType == FET::Invalid)
+        continue;
+
+      // Identify Source address
+      auto [Source, Size] = getPC(BB->getTerminator());
+      Source += Size;
+      revng_assert(Source.isValid());
+
+      // Identify Destination address
+      MetaAddress JumpTargetAddress = GeneratingJumpTarget.at(BB);
+      model::BasicBlock &CurrentBlock = Function
+                                          .CFG[{ JumpTargetAddress, Source }];
+
+      if (EdgeType == FET::DirectBranch) {
+        auto Successors = GCBI.getSuccessors(BB);
+        for (const MetaAddress &Destination : Successors.Addresses) {
+          llvm::errs() << "From " << Source.toString() << " (" << getName(BB)
+                       << ")"
+                       << " to " << Destination.toString() << " of type "
+                       << FunctionEdgeType::getName(EdgeType) << "\n";
+          CurrentBlock.Successors.insert(FunctionEdge{ Destination, EdgeType });
+        }
+      } else if (EdgeType == FET::FakeFunctionReturn) {
+        auto [First, Last] = FunctionSummary.FakeReturns.equal_range(BB);
+        revng_assert(First != Last);
+        for (const auto &[_, Destination] : make_range(First, Last)) {
+          llvm::errs() << "From " << Source.toString() << " (" << getName(BB)
+                       << ")"
+                       << " to " << Destination.toString() << " of type "
+                       << FunctionEdgeType::getName(EdgeType) << "\n";
+          CurrentBlock.Successors.insert(FunctionEdge{ Destination, EdgeType });
+        }
+      } else {
+        llvm::BasicBlock *Successor = BB->getSingleSuccessor();
+        MetaAddress Destination = MetaAddress::invalid();
+        if (Successor != nullptr)
+          Destination = getBasicBlockPC(Successor);
+
+        llvm::errs() << "From " << Source.toString() << " (" << getName(BB)
+                     << ")"
+                     << " to " << Destination.toString() << " ("
+                     << getName(Successor) << ")"
+                     << " of type " << FunctionEdgeType::getName(EdgeType)
+                     << "\n";
+
+        // Record the edge in the CFG
+        CurrentBlock.Successors.insert(FunctionEdge{ Destination, EdgeType });
+      }
+    }
+    // Inserter.commit();
+
+#if 0
     for (const auto &[Block, Branch] : FunctionSummary.BasicBlocks) {
       // Remap BranchType to FunctionEdgeType
       namespace FET = FunctionEdgeType;
@@ -169,12 +366,13 @@ commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
         continue;
 
       // Identify Source address
-      MetaAddress Source = getPC(Block->getTerminator()).first;
+      auto [Source, Size] = getPC(Block->getTerminator());
+      Source += Size;
       revng_assert(Source.isValid());
 
       // Identify Destination address
       MetaAddress Destination = MetaAddress::invalid();
-      BasicBlock *Successor = Block->getSingleSuccessor();
+      llvm::BasicBlock *Successor = Block->getSingleSuccessor();
       if (Successor != nullptr)
         Destination = getBasicBlockPC(Successor);
 
@@ -187,9 +385,10 @@ commitToModel(const FunctionsSummary &Summary, model::Binary &TheBinary) {
 
       // Record the edge in the CFG
       FunctionEdge NewEdge{ Source, Destination, EdgeType };
-      revng_assert(Function.CFG.count(NewEdge) == 0);
-      Function.CFG.insert(NewEdge);
+      if (Function.CFG.count(NewEdge) == 0)
+        Function.CFG.insert(NewEdge);
     }
+#endif
 
     revng_check(Function.verifyCFG());
   }
@@ -311,8 +510,6 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
 
   GrandResult = Results.finalize(&M, &TheCache);
 
-  commitToModel(GrandResult, LMP.getWriteableModel());
-
   if (ClobberedLog.isEnabled()) {
     for (auto &P : GrandResult.Functions) {
       ClobberedLog << getName(P.first) << ":";
@@ -339,6 +536,8 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
     std::ofstream Output;
     serialize(pathToStream(StackAnalysisOutputPath, Output));
   }
+
+  commitToModel(GCBI, &F, GrandResult, LMP.getWriteableModel());
 
   return false;
 }

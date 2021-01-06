@@ -201,6 +201,20 @@ public:
     return PCH.get();
   }
 
+  template<typename T>
+  llvm::SwitchInst *buildDispatcher(T &Targets, llvm::IRBuilder<> &Builder) {
+    ProgramCounterHandler::DispatcherTargets TargetsPairs;
+    TargetsPairs.reserve(Targets.size());
+    for (MetaAddress MA : Targets)
+      TargetsPairs.push_back({ MA, getBlockAt(MA) });
+
+    auto IBDHB = BlockType::IndirectBranchDispatcherHelperBlock;
+    return programCounterHandler()->buildDispatcher(TargetsPairs,
+                                                    Builder,
+                                                    UnexpectedPC,
+                                                    { IBDHB });
+  }
+
   /// \brief Return the basic block associated to \p PC
   ///
   /// Returns nullptr if the PC doesn't have a basic block (yet)
@@ -213,7 +227,7 @@ public:
   }
 
   /// \brief Return true if the basic block is a jump target
-  bool isJumpTarget(llvm::BasicBlock *BB) const {
+  static bool isJumpTarget(llvm::BasicBlock *BB) {
     return getType(BB->getTerminator()) == BlockType::JumpTargetBlock;
   }
 
@@ -242,7 +256,7 @@ public:
   /// \brief Return true if \p BB is the result of translating some code
   ///
   /// Return false if \p BB is a dispatcher-related basic block.
-  bool isTranslated(llvm::BasicBlock *BB) const {
+  static bool isTranslated(llvm::BasicBlock *BB) {
     BlockType::Values Type = getType(BB);
     return (Type == BlockType::TranslatedBlock
             or Type == BlockType::JumpTargetBlock);
@@ -257,6 +271,15 @@ public:
 
   llvm::CallInst *getFunctionCall(llvm::BasicBlock *BB) const {
     return getFunctionCall(BB->getTerminator());
+  }
+
+  llvm::BasicBlock *getCallReturnBlock(llvm::BasicBlock *BB) const {
+    using namespace llvm;
+    CallInst *FunctionCallMarker = getFunctionCall(BB);
+    revng_assert(FunctionCallMarker != nullptr);
+    BlockAddress *FallthroughBA = cast<BlockAddress>(
+      FunctionCallMarker->getOperand(1));
+    return FallthroughBA->getBasicBlock();
   }
 
   // TODO: is this a duplication of FunctionCallIdentification::isCall?
@@ -275,6 +298,20 @@ public:
     }
 
     return nullptr;
+  }
+
+  using PCToBlockMap = std::multimap<MetaAddress, llvm::BasicBlock *>;
+  // WIP: make private
+  PCToBlockMap PCToBlockCache;
+
+  static llvm::BasicBlock *getSecond(PCToBlockMap::value_type &Element) {
+    return Element.second;
+  }
+
+  auto getBlocksGeneratedByPC(MetaAddress PC) {
+    auto [Start, End] = PCToBlockCache.equal_range(PC);
+    return llvm::make_range(llvm::map_iterator(Start, getSecond),
+                            llvm::map_iterator(End, getSecond));
   }
 
   bool isFunctionCall(llvm::BasicBlock *BB) const {
@@ -353,18 +390,27 @@ public:
     return MetaAddress::fromPC(ArchType, PC);
   }
 
-  struct Successors {
+  struct SuccessorsList {
     bool AnyPC = false;
     bool UnexpectedPC = false;
     bool Other = false;
     std::set<MetaAddress> Addresses;
+
+    static SuccessorsList other() {
+      SuccessorsList Result;
+      Result.Other = true;
+      return Result;
+    }
+
+    bool isIndirect() const { return AnyPC or UnexpectedPC; }
+    bool isDirect() const { return not isIndirect(); }
   };
 
-  Successors getSuccessors(llvm::BasicBlock *BB) const;
+  SuccessorsList getSuccessors(llvm::BasicBlock *BB) const;
 
   llvm::Function *root() const { return RootFunction; }
 
-    llvm::SmallVector<std::pair<llvm::BasicBlock *, bool>, 4>
+  llvm::SmallVector<std::pair<llvm::BasicBlock *, bool>, 4>
   blocksByPCRange(MetaAddress Start, MetaAddress End);
 
   static MetaAddress getPCFromNewPC(llvm::Instruction *I) {
