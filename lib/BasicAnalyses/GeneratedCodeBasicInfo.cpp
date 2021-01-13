@@ -10,6 +10,7 @@
 #include <set>
 
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 
@@ -120,6 +121,7 @@ GeneratedCodeBasicInfo::getSuccessors(BasicBlock *BB) const {
   df_iterator_default_set<BasicBlock *> Visited;
   Visited.insert(AnyPC);
   Visited.insert(UnexpectedPC);
+  Visited.insert(Dispatcher); // WIP
   for (BasicBlock *Block : depth_first_ext(BB, Visited)) {
     for (BasicBlock *Successor : successors(Block)) {
       MetaAddress Address = getBasicBlockPC(Successor);
@@ -128,6 +130,9 @@ GeneratedCodeBasicInfo::getSuccessors(BasicBlock *BB) const {
         Visited.insert(Successor);
         Result.Addresses.insert(Address);
       } else if (Successor == AnyPC) {
+        Result.AnyPC = true;
+      } else if (Successor == Dispatcher) {
+        // WIP
         Result.AnyPC = true;
       } else if (Successor == UnexpectedPC) {
         Result.UnexpectedPC = true;
@@ -187,4 +192,24 @@ GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
   }
 
   return Result;
+}
+
+void GeneratedCodeBasicInfo::initializePCToBlockCache() {
+  DominatorTree DT(*RootFunction);
+  for (BasicBlock &BB : *RootFunction) {
+    if (not GeneratedCodeBasicInfo::isTranslated(&BB)
+        and getType(&BB)
+        != BlockType::IndirectBranchDispatcherHelperBlock)
+      continue;
+
+    auto *DTNode = DT.getNode(&BB);
+    revng_assert(DTNode != nullptr);
+
+    while (not GeneratedCodeBasicInfo::isJumpTarget(DTNode->getBlock())) {
+      DTNode = DTNode->getIDom();
+      revng_assert(DTNode != nullptr);
+    }
+
+    PCToBlockCache.insert({ getBasicBlockPC(DTNode->getBlock()), &BB });
+  }
 }

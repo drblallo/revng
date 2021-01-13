@@ -308,7 +308,12 @@ public:
     return Element.second;
   }
 
+  void initializePCToBlockCache();
+  
   auto getBlocksGeneratedByPC(MetaAddress PC) {
+    if (PCToBlockCache.size() == 0)
+      initializePCToBlockCache();
+
     auto [Start, End] = PCToBlockCache.equal_range(PC);
     return llvm::make_range(llvm::map_iterator(Start, getSecond),
                             llvm::map_iterator(End, getSecond));
@@ -404,6 +409,21 @@ public:
 
     bool isIndirect() const { return AnyPC or UnexpectedPC; }
     bool isDirect() const { return not isIndirect(); }
+
+    void dump() const debug_function { dump(dbg); }
+    
+    template<typename O>
+    void dump(O &Output) const {
+      Output << "AnyPC: " << AnyPC << "\n";
+      Output << "UnexpectedPC: " << UnexpectedPC << "\n";
+      Output << "Other: " << Other << "\n";
+      Output << "Addresses:\n";
+      for (const MetaAddress &Address : Addresses) {
+        Output << "  ";
+        Address.dump(Output);
+        Output << "\n";
+      }
+    }
   };
 
   SuccessorsList getSuccessors(llvm::BasicBlock *BB) const;

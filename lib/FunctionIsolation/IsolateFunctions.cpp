@@ -52,9 +52,19 @@ eraseBranch(Instruction *I, BasicBlock *ExpectedUniqueSuccessor = nullptr) {
 
 using SuccessorsList = GeneratedCodeBasicInfo::SuccessorsList;
 struct Boundary {
-  BasicBlock *Block;
-  bool IsCall;
+  BasicBlock *Block = nullptr;
+  bool IsCall = false;
   SuccessorsList Successors;
+
+  void dump() const debug_function { dump(dbg); }
+
+  template<typename O>
+  void dump(O &Output) const {
+    Output << "Block: " << getName(Block) << "\n";
+    Output << "IsCall: " << IsCall << "\n";
+    Output << "Successors: \n";
+    Successors.dump(Output);
+  }
 };
 
 class IsolateFunctionsImpl {
@@ -160,18 +170,18 @@ private:
   StringRef getFunctionNameString(MDNode *Node);
 
 private:
-  Function *RootFunction;
-  Module *TheModule;
+  Function *RootFunction = nullptr;
+  Module *TheModule = nullptr;
   GeneratedCodeBasicInfo &GCBI;
   const model::Binary &Binary;
   LLVMContext &Context;
-  Function *RaiseException;
-  Function *FunctionDispatcher;
+  Function *RaiseException = nullptr;
+  Function *FunctionDispatcher = nullptr;
   std::map<MDString *, IsolatedFunctionDescriptor> Functions;
   std::map<BasicBlock *, BasicBlock *> IsolatedToRootBB;
-  GlobalVariable *PC;
+  GlobalVariable *PC = nullptr;
   const unsigned PCBitSize;
-  Function *CallMarker;
+  Function *CallMarker = nullptr;
 };
 
 void IFI::throwException(IRBuilder<> &Builder,
@@ -757,7 +767,7 @@ allOrNone(const T &Range, const F &Predicate, bool Default = false) {
 template<typename T, typename F>
 static auto
 zeroOrOne(const T &Range, const F &Predicate) -> decltype(&*Range.begin()) {
-  decltype(&*Range.begin()) Result;
+  decltype(&*Range.begin()) Result = nullptr;
   for (auto &E : Range) {
     if (Predicate(E)) {
       revng_assert(not Result);
@@ -838,7 +848,7 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
                                  bool CallConsumed) {
   // At this point ExpectedSuccessors must either be a series of
   // `DirectBranch` or a single one of the indirect ones
-  bool NoMore = ExpectedSuccessors.size() > 0;
+  bool NoMore = ExpectedSuccessors.size() == 0;
   using namespace model::FunctionEdgeType;
 
   auto IsDirectEdge = [](const model::FunctionEdge &E) {
@@ -870,8 +880,8 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
 
   // Whatever the situation, we need to replace the terminator of this basic
   // block at this point
-  eraseBranch(BB->getTerminator());
-  IRBuilder<> Builder(BB);
+  Instruction *OldTerminator = BB->getTerminator();
+  IRBuilder<> Builder(OldTerminator);
 
   if (AllDirect) {
     revng_assert(not IndirectBoundary->IsCall);
@@ -893,14 +903,19 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
 
   } else {
     revng_assert(IndirectBoundary->IsCall == (IndirectType == IndirectCall));
-    Type *CalleeOperandType = CallMarker->getFunctionType()->getParamType(1);
+    Type *CalleeOperandType = CallMarker->getFunctionType()->getParamType(0);
     auto *CalleeOperandPointerType = cast<PointerType>(CalleeOperandType);
     auto NullPointer = ConstantPointerNull::get(CalleeOperandPointerType);
 
     switch (IndirectType) {
     case IndirectCall:
-      Builder.CreateCall(CallMarker, NullPointer);
-      Builder.CreateBr(GCBI.getCallReturnBlock(BB));
+      {
+        BasicBlock *ReturnBlock = GCBI.getCallReturnBlock(BB);
+        Instruction *FunctionCall = GCBI.getFunctionCall(BB);
+        Builder.CreateCall(CallMarker, NullPointer);
+        Builder.CreateBr(ReturnBlock);
+        FunctionCall->eraseFromParent();
+      }
       break;
 
     case Return:
@@ -924,6 +939,8 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
     }
   }
 
+  OldTerminator->eraseFromParent();
+
   return true;
 }
 
@@ -935,13 +952,14 @@ bool IFI::handleDirectBoundary(const T &Boundary,
   SetOnce IsCall;
   size_t Consumed = 0;
   auto It = ExpectedSuccessors.begin();
-  auto End = ExpectedSuccessors.end();
-  while (It != End) {
+  while (It != ExpectedSuccessors.end()) {
     const auto &Edge = *It;
 
     // Is this edge targeting who we expect?
-    if (Boundary.Successors.Addresses.count(Edge.Destination) == 0)
+    if (Boundary.Successors.Addresses.count(Edge.Destination) == 0) {
+      ++It;
       continue;
+    }
 
     bool Consume = false;
     switch (Edge.Type) {
@@ -971,11 +989,15 @@ bool IFI::handleDirectBoundary(const T &Boundary,
           BasicBlock *CalleeBB = GCBI.getBlockAt(Edge.Destination);
           BasicBlock *Fallthrough = GCBI.getCallReturnBlock(BB);
 
+          // WIP
+          GCBI.getFunctionCall(BB)->eraseFromParent();
+
           eraseBranch(BB->getTerminator(), CalleeBB);
 
           IRBuilder<> Builder(BB);
-          Builder.CreateCall(CallMarker,
-                             BlockAddress::get(RootFunction, CalleeBB));
+          // WIP
+          // Builder.CreateCall(CallMarker,
+          //                    BlockAddress::get(RootFunction, CalleeBB));
           Builder.CreateBr(Fallthrough);
         }
       }
@@ -997,6 +1019,7 @@ IFI::cloneAndIdentifyBoundaries(MetaAddress Entry,
   std::set<BasicBlock *> Blocks;
   for (BasicBlock *Block : GCBI.getBlocksGeneratedByPC(Entry))
     Blocks.insert(Block);
+  revng_assert(Blocks.size() > 0);
 
   std::vector<Boundary> Boundaries;
 
@@ -1012,7 +1035,7 @@ IFI::cloneAndIdentifyBoundaries(MetaAddress Entry,
     };
     if (allOrNone(successors(BB), IsBoundary, true)) {
       bool IsCall = (GCBI.getFunctionCall(BB) != nullptr);
-      Boundaries.push_back({ BB, IsCall, GCBI.getSuccessors(BB) });
+      Boundaries.push_back({ NewBB, IsCall, GCBI.getSuccessors(BB) });
     }
   }
 
@@ -1034,12 +1057,40 @@ void IFI::handleBasicBlock(const model::BasicBlock &Block,
   // represent direct jumps, then we'll take care of the (only) indirect jump,
   // if any
 
-  auto ExpectedSuccessors = Block.Successors;
+  SortedVector<model::FunctionEdge> ExpectedSuccessors = Block.Successors;
+
+  // Remove self-loops, nothing to do about them
+  ExpectedSuccessors.erase(std::remove_if(ExpectedSuccessors.begin(),
+                                          ExpectedSuccessors.end(),
+                                          [&Block] (const model::FunctionEdge &E) {
+                                            return E.Destination == Block.Start;
+                                          }),
+                           ExpectedSuccessors.end());
+  
   int IndirectCount = 0;
+
+  if (TheLogger.isEnabled()) {
+    TheLogger << "Boundaries: \n";
+    for (const Boundary &B : Boundaries) {
+      B.dump(TheLogger);
+      TheLogger << "\n";
+    }
+    TheLogger << DoLog;
+    TheLogger << "Expected:\n";
+    std::string Buffer;
+    {
+      raw_string_ostream StringStream(Buffer);
+      yaml::Output YAMLOutput(StringStream);
+      for (model::FunctionEdge &Edge : ExpectedSuccessors) {
+        YAMLOutput << Edge;
+      }
+    }
+    TheLogger << Buffer << DoLog;
+  }
 
   // Consume direct jumps calls
   for (const auto &Boundary : Boundaries) {
-    if (Boundary.Successors.isIndirect()) {
+    if (Boundary.Successors.isDirect()) {
       bool Result = handleDirectBoundary(Boundary, ExpectedSuccessors);
       CallConsumed.setIf(Result);
     }
@@ -1056,7 +1107,6 @@ std::pair<BasicBlock *, Function *>
 IFI::isolate(const model::Function &Function) {
   // List of cloned basic blocks, dummy entry is preallocated
   SmallVector<BasicBlock *, 16> ClonedBlocks = { nullptr };
-  BasicBlock *&DummyEntry = ClonedBlocks[0];
 
   // Map from origina values to new ones
   ValueToValueMapTy OldToNew;
@@ -1064,11 +1114,23 @@ IFI::isolate(const model::Function &Function) {
   // Get the entry basic block
   BasicBlock *OriginalEntry = GCBI.getBlockAt(Function.Entry);
 
+  TheLogger << "Isolating ";
+  Function.Entry.dump(TheLogger);
+  TheLogger << DoLog;
+  LoggerIndent<> Indent(TheLogger);
+
   for (const model::BasicBlock &Block : Function.CFG) {
+    TheLogger << "Isolating ";
+    Block.Start.dump(TheLogger);
+    TheLogger << "-";
+    Block.End.dump(TheLogger);
+    TheLogger << DoLog;
+    LoggerIndent<> Indent2(TheLogger);
     handleBasicBlock(Block, OldToNew, ClonedBlocks);
   }
 
   // Create a dummy entry branching to real entry
+  BasicBlock *&DummyEntry = ClonedBlocks[0];
   revng_assert(DummyEntry == nullptr);
   DummyEntry = BasicBlock::Create(Context, "", RootFunction);
   BranchInst::Create(cast<BasicBlock>(&*OldToNew[OriginalEntry]), DummyEntry);
@@ -1137,31 +1199,6 @@ void IFI::replaceCallMarker(
 }
 
 void IFI::run() {
-  FunctionDispatcher = Function::Create(createFunctionType<void, char *>(
-                                          Context),
-                                        GlobalValue::InternalLinkage,
-                                        "function_dispatcher",
-                                        TheModule);
-
-  CallMarker = Function::Create(createFunctionType<void, char *>(Context),
-                                GlobalValue::InternalLinkage,
-                                "call_marker",
-                                TheModule);
-
-  BlockToFunctionsMap IsolatedFunctions;
-  for (const model::Function &Function : Binary.Functions) {
-    auto [EntryBlock, IsolatedFunction] = isolate(Function);
-    revng_assert(IsolatedFunctions.count(EntryBlock) == 0);
-    IsolatedFunctions.insert({ EntryBlock, IsolatedFunction });
-  }
-
-  replaceCallMarker(IsolatedFunctions);
-
-  CallMarker->eraseFromParent();
-  CallMarker = nullptr;
-
-  revng_abort();
-
   using namespace StackAnalysis::BranchType;
 
   // This function includes all the passages that realize the function
@@ -1211,6 +1248,34 @@ void IFI::run() {
                                     "raise_exception_helper",
                                     TheModule);
 
+#if 1
+  FunctionDispatcher = Function::Create(createFunctionType<void, char *>(
+                                                                         Context),
+                                        GlobalValue::ExternalLinkage,
+                                        "function_dispatcher",
+                                        TheModule);
+
+  this->CallMarker = Function::Create(createFunctionType<void, char *>(Context),
+                                      GlobalValue::ExternalLinkage,
+                                      "call_marker",
+                                      TheModule);
+
+  BlockToFunctionsMap IsolatedFunctions;
+  for (const model::Function &Function : Binary.Functions) {
+    auto [EntryBlock, IsolatedFunction] = isolate(Function);
+    revng_assert(IsolatedFunction != nullptr);
+    IsolatedFunction->dump();
+    revng_assert(IsolatedFunctions.count(EntryBlock) == 0);
+    IsolatedFunctions.insert({ EntryBlock, IsolatedFunction });
+  }
+
+  replaceCallMarker(IsolatedFunctions);
+
+  this->CallMarker->eraseFromParent();
+  this->CallMarker = nullptr;
+#endif
+
+  
   // 3. Search for all the alloca instructions and place them in an helper data
   //    structure in order to copy them at the beginning of the function where
   //    they are used. The alloca initially are all placed in the entry block of
