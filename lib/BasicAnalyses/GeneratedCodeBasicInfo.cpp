@@ -197,13 +197,14 @@ GeneratedCodeBasicInfo::blocksByPCRange(MetaAddress Start, MetaAddress End) {
 void GeneratedCodeBasicInfo::initializePCToBlockCache() {
   DominatorTree DT(*RootFunction);
   for (BasicBlock &BB : *RootFunction) {
-    if (not GeneratedCodeBasicInfo::isTranslated(&BB)
-        and getType(&BB)
-        != BlockType::IndirectBranchDispatcherHelperBlock)
+    if (not GeneratedCodeBasicInfo::isTranslated(&BB))
       continue;
 
     auto *DTNode = DT.getNode(&BB);
-    revng_assert(DTNode != nullptr);
+
+    // Ignore unreachable basic block
+    if (DTNode == nullptr)
+      continue;
 
     while (not GeneratedCodeBasicInfo::isJumpTarget(DTNode->getBlock())) {
       DTNode = DTNode->getIDom();

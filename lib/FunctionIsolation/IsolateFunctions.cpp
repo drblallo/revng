@@ -111,14 +111,20 @@ private:
                              SmallVectorImpl<BasicBlock *> &ClonedBlocks);
 
   // WIP: drop T
-  template<typename T, typename SuccessorsContainer>
+  using SuccessorsContainer = std::map<model::FunctionEdge, int>;
+  template<typename T>
   bool handleDirectBoundary(const T &Boundary,
                             SuccessorsContainer &ExpectedSuccessors);
 
-  template<typename SucccessorsContainer>
-  bool handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
-                              const SucccessorsContainer &ExpectedSuccessors,
-                              bool CallConsumed);
+  struct IndirectBoundaryInfo {
+    bool HasIndirectBoundary;
+    llvm::SmallVector<BasicBlock *, 4> NewBlocks;
+  };
+  IndirectBoundaryInfo
+  handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
+                         const SuccessorsContainer &ExpectedSuccessors,
+                         bool CallConsumed,
+                         BasicBlock *ReturnBlock);
 
 private:
   /// \brief Creates the call that simulates the throw of an exception
@@ -797,7 +803,7 @@ public:
   operator bool() const { return State; }
 };
 
-static bool isIndirectEdge(model::FunctionEdgeType::Values Type) {
+static bool isDirectEdge(model::FunctionEdgeType::Values Type) {
   using namespace model::FunctionEdgeType;
 
   switch (Type) {
@@ -808,17 +814,21 @@ static bool isIndirectEdge(model::FunctionEdgeType::Values Type) {
   case LongJmp:
   case Killer:
   case Unreachable:
-    return true;
+    return false;
 
   case DirectBranch:
   case FakeFunctionCall:
   case FunctionCall:
   case FakeFunctionReturn:
-    return false;
+    return true;
 
   case Invalid:
     revng_abort();
   }
+}
+
+static bool isIndirectEdge(model::FunctionEdgeType::Values Type) {
+  return not isDirectEdge(Type);
 }
 
 template<typename LeftMap, typename RightMap>
@@ -832,34 +842,42 @@ void printAddressListComparison(const LeftMap &ExpectedAddresses,
         TheLogger << "Warning: ";
         ActualAddress->dump(TheLogger);
         TheLogger << " detected as a jump target, but the model does not list "
-                     "it";
+          "it" << DoLog;
       } else if (ActualAddress == nullptr) {
         TheLogger << "Warning: ";
         ExpectedAddress->dump(TheLogger);
-        TheLogger << " not detected as a jump target, but the model lists it";
+        TheLogger << " not detected as a jump target, but the model lists it" << DoLog;
       }
     }
   }
 }
 
-template<typename SucccessorsContainer>
-bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
-                                 const SucccessorsContainer &ExpectedSuccessors,
-                                 bool CallConsumed) {
-  // At this point ExpectedSuccessors must either be a series of
+IFI::IndirectBoundaryInfo
+IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
+                            const SuccessorsContainer &ExpectedSuccessors,
+                            bool CallConsumed,
+                            BasicBlock *ReturnBlock) {
+  std::vector<model::FunctionEdge> RemainingEdges;
+  for (auto &[Edge, EdgeUsageCount] : ExpectedSuccessors)
+    if (EdgeUsageCount == 0)
+      RemainingEdges.push_back(Edge);
+
+  // At this point RemainingEdges must either be a series of
   // `DirectBranch` or a single one of the indirect ones
-  bool NoMore = ExpectedSuccessors.size() == 0;
+  bool NoMore = RemainingEdges.size() == 0;
   using namespace model::FunctionEdgeType;
 
-  auto IsDirectEdge = [](const model::FunctionEdge &E) {
-    return E.Type == DirectBranch;
-  };
-  bool AllDirect = allOrNone(ExpectedSuccessors, IsDirectEdge, false);
+  bool AllDirect = allOrNone(
+    RemainingEdges,
+    [](const model::FunctionEdge &E) { return isDirectEdge(E.Type); },
+    false);
 
   auto IndirectType = Invalid;
   if (not NoMore and not AllDirect) {
-    revng_assert(ExpectedSuccessors.size() == 1);
-    IndirectType = ExpectedSuccessors.begin()->Type;
+    // We're not out of expected successors, but they are not all directy.
+    // We expect a single indirect edge.
+    revng_assert(RemainingEdges.size() == 1);
+    IndirectType = RemainingEdges.begin()->Type;
     revng_assert(isIndirectEdge(IndirectType));
   }
 
@@ -872,9 +890,10 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
 
   if (IndirectBoundary == nullptr) {
     revng_assert(NoMore);
-    return false;
+    return { false, {} };
   }
 
+  IndirectBoundaryInfo Result{ true, {} };
   BasicBlock *BB = IndirectBoundary->Block;
   revng_assert(not NoMore);
 
@@ -889,7 +908,7 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
     SortedVector<MetaAddress> ExpectedAddresses;
     {
       auto Inserter = ExpectedAddresses.batch_insert();
-      for (const model::FunctionEdge &Edge : ExpectedSuccessors)
+      for (const model::FunctionEdge &Edge : RemainingEdges)
         Inserter.insert(Edge.Destination);
     }
 
@@ -899,7 +918,10 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
                                IndirectBoundary->Successors.Addresses);
 
     // Create the dispatcher for the targets
-    GCBI.buildDispatcher(ExpectedAddresses, Builder);
+    auto Dispatcher = GCBI.buildDispatcher(ExpectedAddresses,
+                                           Builder,
+                                           ReturnBlock /* WIP */);
+    Result.NewBlocks = std::move(Dispatcher.NewBlocks);
 
   } else {
     revng_assert(IndirectBoundary->IsCall == (IndirectType == IndirectCall));
@@ -908,23 +930,21 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
     auto NullPointer = ConstantPointerNull::get(CalleeOperandPointerType);
 
     switch (IndirectType) {
-    case IndirectCall:
-      {
-        BasicBlock *ReturnBlock = GCBI.getCallReturnBlock(BB);
-        Instruction *FunctionCall = GCBI.getFunctionCall(BB);
-        Builder.CreateCall(CallMarker, NullPointer);
-        Builder.CreateBr(ReturnBlock);
-        FunctionCall->eraseFromParent();
-      }
-      break;
+    case IndirectCall: {
+      BasicBlock *ReturnAddressBlock = GCBI.getCallReturnBlock(BB);
+      Instruction *FunctionCall = GCBI.getFunctionCall(BB);
+      Builder.CreateCall(CallMarker, NullPointer);
+      Builder.CreateBr(ReturnAddressBlock);
+      FunctionCall->eraseFromParent();
+    } break;
 
     case Return:
-      Builder.CreateRetVoid();
+      Builder.CreateBr(ReturnBlock);
       break;
 
     case IndirectTailCall:
       Builder.CreateCall(CallMarker, NullPointer);
-      Builder.CreateRetVoid();
+      Builder.CreateBr(ReturnBlock);
       break;
 
     case BrokenReturn:
@@ -941,25 +961,20 @@ bool IFI::handleIndirectBoundary(const std::vector<Boundary> &Boundaries,
 
   OldTerminator->eraseFromParent();
 
-  return true;
+  return Result;
 }
 
 /// \return true if this was a call
-template<typename T, typename SucccessorsContainer>
+template<typename T>
 bool IFI::handleDirectBoundary(const T &Boundary,
-                               SucccessorsContainer &ExpectedSuccessors) {
+                               SuccessorsContainer &ExpectedSuccessors) {
   BasicBlock *BB = Boundary.Block;
   SetOnce IsCall;
   size_t Consumed = 0;
-  auto It = ExpectedSuccessors.begin();
-  while (It != ExpectedSuccessors.end()) {
-    const auto &Edge = *It;
-
+  for (auto &[Edge, EdgeUsageCount] : ExpectedSuccessors) {
     // Is this edge targeting who we expect?
-    if (Boundary.Successors.Addresses.count(Edge.Destination) == 0) {
-      ++It;
+    if (Boundary.Successors.Addresses.count(Edge.Destination) == 0)
       continue;
-    }
 
     bool Consume = false;
     switch (Edge.Type) {
@@ -978,32 +993,30 @@ bool IFI::handleDirectBoundary(const T &Boundary,
       break;
     }
 
-    if (Consume) {
-      ++Consumed;
-      It = ExpectedSuccessors.erase(It);
+    if (not Consume)
+      continue;
 
-      if (Boundary.IsCall) {
-        IsCall.set();
+    ++Consumed;
+    ++EdgeUsageCount;
 
-        if (Edge.Type == model::FunctionEdgeType::FunctionCall) {
-          BasicBlock *CalleeBB = GCBI.getBlockAt(Edge.Destination);
-          BasicBlock *Fallthrough = GCBI.getCallReturnBlock(BB);
+    if (Boundary.IsCall) {
+      IsCall.set();
 
-          // WIP
-          GCBI.getFunctionCall(BB)->eraseFromParent();
+      if (Edge.Type == model::FunctionEdgeType::FunctionCall) {
+        BasicBlock *CalleeBB = GCBI.getBlockAt(Edge.Destination);
+        BasicBlock *Fallthrough = GCBI.getCallReturnBlock(BB);
 
-          eraseBranch(BB->getTerminator(), CalleeBB);
+        // WIP
+        GCBI.getFunctionCall(BB)->eraseFromParent();
 
-          IRBuilder<> Builder(BB);
-          // WIP
-          // Builder.CreateCall(CallMarker,
-          //                    BlockAddress::get(RootFunction, CalleeBB));
-          Builder.CreateBr(Fallthrough);
-        }
+        eraseBranch(BB->getTerminator(), CalleeBB);
+
+        IRBuilder<> Builder(BB);
+        // WIP
+        // Builder.CreateCall(CallMarker,
+        //                    BlockAddress::get(RootFunction, CalleeBB));
+        Builder.CreateBr(Fallthrough);
       }
-
-    } else {
-      ++It;
     }
   }
 
@@ -1045,6 +1058,9 @@ IFI::cloneAndIdentifyBoundaries(MetaAddress Entry,
 void IFI::handleBasicBlock(const model::BasicBlock &Block,
                            ValueToValueMapTy &OldToNew,
                            SmallVectorImpl<BasicBlock *> &ClonedBlocks) {
+  revng_assert(ClonedBlocks.size() >= 2);
+  BasicBlock *ReturnBlock = ClonedBlocks[1];
+
   // Sentinel to ensure we don't have more than a call within a basic block
   SetOnce CallConsumed;
 
@@ -1057,16 +1073,14 @@ void IFI::handleBasicBlock(const model::BasicBlock &Block,
   // represent direct jumps, then we'll take care of the (only) indirect jump,
   // if any
 
-  SortedVector<model::FunctionEdge> ExpectedSuccessors = Block.Successors;
+  SuccessorsContainer ExpectedSuccessors;
+  for (const model::FunctionEdge &E : Block.Successors) {
+    // Ignore self-loops
+    if (E.Destination != Block.Start) {
+      ExpectedSuccessors[E] = 0;
+    }
+  }
 
-  // Remove self-loops, nothing to do about them
-  ExpectedSuccessors.erase(std::remove_if(ExpectedSuccessors.begin(),
-                                          ExpectedSuccessors.end(),
-                                          [&Block] (const model::FunctionEdge &E) {
-                                            return E.Destination == Block.Start;
-                                          }),
-                           ExpectedSuccessors.end());
-  
   int IndirectCount = 0;
 
   if (TheLogger.isEnabled()) {
@@ -1081,7 +1095,7 @@ void IFI::handleBasicBlock(const model::BasicBlock &Block,
     {
       raw_string_ostream StringStream(Buffer);
       yaml::Output YAMLOutput(StringStream);
-      for (model::FunctionEdge &Edge : ExpectedSuccessors) {
+      for (model::FunctionEdge Edge : Block.Successors) {
         YAMLOutput << Edge;
       }
     }
@@ -1096,17 +1110,33 @@ void IFI::handleBasicBlock(const model::BasicBlock &Block,
     }
   }
 
-  bool HasIndirectBoundary = handleIndirectBoundary(Boundaries,
-                                                    ExpectedSuccessors,
-                                                    CallConsumed);
+  auto Result = handleIndirectBoundary(Boundaries,
+                                       ExpectedSuccessors,
+                                       CallConsumed,
+                                       ReturnBlock);
 
-  revng_assert(not(HasIndirectBoundary and CallConsumed));
+  // Register new blocks
+  std::copy(Result.NewBlocks.begin(),
+            Result.NewBlocks.end(),
+            std::back_inserter(ClonedBlocks));
+
+  revng_assert(not(Result.HasIndirectBoundary and CallConsumed));
 }
 
 std::pair<BasicBlock *, Function *>
 IFI::isolate(const model::Function &Function) {
-  // List of cloned basic blocks, dummy entry is preallocated
-  SmallVector<BasicBlock *, 16> ClonedBlocks = { nullptr };
+  revng_assert(Function.Type == model::FunctionType::Regular);
+
+  // List of cloned basic blocks, dummy entry and return block are preallocated
+  SmallVector<BasicBlock *, 16> ClonedBlocks = { nullptr, nullptr };
+
+  // Create return block
+  auto *ReturnBlock = BasicBlock::Create(Context,
+                                         "return",
+                                         RootFunction,
+                                         nullptr);
+  ReturnInst::Create(Context, ReturnBlock);
+  ClonedBlocks[1] = ReturnBlock;
 
   // Map from origina values to new ones
   ValueToValueMapTy OldToNew;
@@ -1135,8 +1165,30 @@ IFI::isolate(const model::Function &Function) {
   DummyEntry = BasicBlock::Create(Context, "", RootFunction);
   BranchInst::Create(cast<BasicBlock>(&*OldToNew[OriginalEntry]), DummyEntry);
 
+  // WIP
+  std::vector<Instruction *> ToDrop;
+  for (BasicBlock *BB : ClonedBlocks) {
+    for (Instruction &I : *BB) {
+      if (isCallTo(&I, "function_call")) {
+        ToDrop.push_back(&I);
+      }
+    }
+  }
+
+  for (Instruction *I : ToDrop) {
+    I->eraseFromParent();
+  }
+
   // Update references
   remapInstructionsInBlocks(ClonedBlocks, OldToNew);
+
+  for (BasicBlock *BB : ClonedBlocks) {
+    if (BB->hasAddressTaken()) {
+      for (User *U : BB->users()) {
+        U->dump();
+      }
+    }
+  }
 
   // Let CodeExtractor create the new function
   // WIP: can we hoist CEAC?
@@ -1148,9 +1200,24 @@ IFI::isolate(const model::Function &Function) {
                                               nullptr,
                                               nullptr,
                                               false,
-                                              false,
+                                              true,
                                               "")
                                   .extractCodeRegion(CEAC);
+
+  if (NewFunction == nullptr) {
+    for (BasicBlock *BB : ClonedBlocks) {
+      BB->dump();
+    }
+  }
+  
+  revng_assert(NewFunction != nullptr);
+
+  FunctionType *FT = NewFunction->getFunctionType();
+  revng_assert(FT->getNumParams() == 0);
+  revng_assert(FT->getReturnType()->isVoidTy());
+
+  // WIP
+  cast<CallInst>(*NewFunction->user_begin())->eraseFromParent();
 
   return { OriginalEntry, NewFunction };
 }
@@ -1249,8 +1316,7 @@ void IFI::run() {
                                     TheModule);
 
 #if 1
-  FunctionDispatcher = Function::Create(createFunctionType<void, char *>(
-                                                                         Context),
+  FunctionDispatcher = Function::Create(createFunctionType<void>(Context),
                                         GlobalValue::ExternalLinkage,
                                         "function_dispatcher",
                                         TheModule);
@@ -1262,9 +1328,11 @@ void IFI::run() {
 
   BlockToFunctionsMap IsolatedFunctions;
   for (const model::Function &Function : Binary.Functions) {
+    if (Function.Type != model::FunctionType::Regular)
+      continue;
+      
     auto [EntryBlock, IsolatedFunction] = isolate(Function);
     revng_assert(IsolatedFunction != nullptr);
-    IsolatedFunction->dump();
     revng_assert(IsolatedFunctions.count(EntryBlock) == 0);
     IsolatedFunctions.insert({ EntryBlock, IsolatedFunction });
   }
@@ -1273,9 +1341,21 @@ void IFI::run() {
 
   this->CallMarker->eraseFromParent();
   this->CallMarker = nullptr;
+
+  for (auto [_, F] : IsolatedFunctions)
+    F->dropAllReferences();
+  for (auto [_, F] : IsolatedFunctions)
+    F->eraseFromParent();
+  FunctionDispatcher->eraseFromParent();
+
 #endif
 
-  
+  FunctionDispatcher = Function::Create(createFunctionType<void, char *>(
+                                          Context),
+                                        GlobalValue::ExternalLinkage,
+                                        "function_dispatcher",
+                                        TheModule);
+
   // 3. Search for all the alloca instructions and place them in an helper data
   //    structure in order to copy them at the beginning of the function where
   //    they are used. The alloca initially are all placed in the entry block of
@@ -1693,8 +1773,11 @@ void IFI::run() {
   // Get the unexpectedpc block of the root function
   BasicBlock *UnexpectedPC = GCBI.unexpectedPC();
   BasicBlock *Dispatcher = GCBI.dispatcher();
-  revng_assert(UnexpectedPC != nullptr);
   revng_assert(Dispatcher != nullptr);
+
+  // WIP
+  if (UnexpectedPC == nullptr)
+    UnexpectedPC = Dispatcher;
 
   // Instantiate the basic block structure that handles the control flow after
   // an invoke

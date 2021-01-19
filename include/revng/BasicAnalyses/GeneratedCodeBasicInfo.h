@@ -202,16 +202,22 @@ public:
   }
 
   template<typename T>
-  llvm::SwitchInst *buildDispatcher(T &Targets, llvm::IRBuilder<> &Builder) {
+  ProgramCounterHandler::DispatcherInfo
+  buildDispatcher(T &Targets,
+                  llvm::IRBuilder<> &Builder,
+                  llvm::BasicBlock *Default = nullptr) {
     ProgramCounterHandler::DispatcherTargets TargetsPairs;
     TargetsPairs.reserve(Targets.size());
     for (MetaAddress MA : Targets)
       TargetsPairs.push_back({ MA, getBlockAt(MA) });
 
+    if (Default == nullptr)
+      Default = UnexpectedPC;
+
     auto IBDHB = BlockType::IndirectBranchDispatcherHelperBlock;
     return programCounterHandler()->buildDispatcher(TargetsPairs,
                                                     Builder,
-                                                    UnexpectedPC,
+                                                    Default,
                                                     { IBDHB });
   }
 
@@ -309,7 +315,7 @@ public:
   }
 
   void initializePCToBlockCache();
-  
+
   auto getBlocksGeneratedByPC(MetaAddress PC) {
     if (PCToBlockCache.size() == 0)
       initializePCToBlockCache();
@@ -327,20 +333,11 @@ public:
     return getFunctionCall(T) != nullptr;
   }
 
-  llvm::BasicBlock *anyPC() const {
-    revng_assert(nullptr != AnyPC);
-    return AnyPC;
-  }
+  llvm::BasicBlock *anyPC() const { return AnyPC; }
 
-  llvm::BasicBlock *unexpectedPC() const {
-    revng_assert(nullptr != UnexpectedPC);
-    return UnexpectedPC;
-  }
+  llvm::BasicBlock *unexpectedPC() const { return UnexpectedPC; }
 
-  llvm::BasicBlock *dispatcher() const {
-    revng_assert(nullptr != Dispatcher);
-    return Dispatcher;
-  }
+  llvm::BasicBlock *dispatcher() const { return Dispatcher; }
 
   const llvm::ArrayRef<llvm::GlobalVariable *> csvs() const { return CSVs; }
 
@@ -411,7 +408,7 @@ public:
     bool isDirect() const { return not isIndirect(); }
 
     void dump() const debug_function { dump(dbg); }
-    
+
     template<typename O>
     void dump(O &Output) const {
       Output << "AnyPC: " << AnyPC << "\n";

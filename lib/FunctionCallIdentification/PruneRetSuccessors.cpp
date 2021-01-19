@@ -27,7 +27,8 @@ bool PruneRetSuccessors::runOnModule(llvm::Module &M) {
     if (not Successors.UnexpectedPC or Successors.Other)
       continue;
 
-    revng_assert(not Successors.AnyPC);
+    // WIP
+    // revng_assert(not Successors.AnyPC);
     bool AllFallthrough = true;
     for (MetaAddress SuccessorMA : Successors.Addresses) {
       if (not FCI.isFallthrough(SuccessorMA)) {

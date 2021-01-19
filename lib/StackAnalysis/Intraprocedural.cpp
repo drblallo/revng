@@ -534,9 +534,6 @@ Interrupt Analysis::handleTerminator(Instruction *T,
   BasicBlock *BB = T->getParent();
   FakeReturns.erase(BB);
 
-  if (llvm::isa<llvm::SwitchInst>(T))
-    dbg << "here\n";
-
   revng_assert(T->isTerminator());
   revng_assert(not isa<UnreachableInst>(T));
 
