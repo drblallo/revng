@@ -133,10 +133,15 @@ public:
   model::BasicBlock &currentBlock() { return BasicBlocksStack.top(); }
 };
 
-static void commitToModel(GeneratedCodeBasicInfo &GCBI,
-                          Function *F,
-                          const FunctionsSummary &Summary,
-                          model::Binary &TheBinary) {
+void commitToModel(GeneratedCodeBasicInfo &GCBI,
+                   Function *F,
+                   const FunctionsSummary &Summary,
+                   model::Binary &TheBinary);
+
+  void commitToModel(GeneratedCodeBasicInfo &GCBI,
+                   Function *F,
+                   const FunctionsSummary &Summary,
+                   model::Binary &TheBinary) {
   using namespace model;
 
   std::map<llvm::BasicBlock *, MetaAddress> GeneratingJumpTarget;
@@ -537,7 +542,9 @@ bool StackAnalysis<AnalyzeABI>::runOnModule(Module &M) {
     serialize(pathToStream(StackAnalysisOutputPath, Output));
   }
 
+#ifdef USE_MODEL
   commitToModel(GCBI, &F, GrandResult, LMP.getWriteableModel());
+#endif
 
   return false;
 }

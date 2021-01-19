@@ -87,7 +87,9 @@ public:
     RootFunction(RootFunction),
     TheModule(RootFunction->getParent()),
     GCBI(GCBI),
+#ifdef USE_MODEL
     Binary(Binary),
+#endif
     Context(getContext(TheModule)),
     PCBitSize(8 * GCBI.pcRegSize()) {}
 
@@ -179,7 +181,9 @@ private:
   Function *RootFunction = nullptr;
   Module *TheModule = nullptr;
   GeneratedCodeBasicInfo &GCBI;
+#ifdef USE_MODEL
   const model::Binary &Binary;
+#endif
   LLVMContext &Context;
   Function *RaiseException = nullptr;
   Function *FunctionDispatcher = nullptr;
@@ -1315,7 +1319,7 @@ void IFI::run() {
                                     "raise_exception_helper",
                                     TheModule);
 
-#if 1
+#if USE_MODEL
   FunctionDispatcher = Function::Create(createFunctionType<void>(Context),
                                         GlobalValue::ExternalLinkage,
                                         "function_dispatcher",
